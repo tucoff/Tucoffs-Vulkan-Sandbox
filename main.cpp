@@ -39,34 +39,9 @@ Create and destroy a simple Vulkan instance.
 #include<stdexcept>
 #include<cstdlib>
 
-class HelloTriangleApplication
-{
-    public:
-        void run() 
-        {
-            initVulkan();
-            mainLoop();
-            cleanup();
-        }
+#include "epic_triangle.h"
 
-    private:
-        void initVulkan() 
-        {
-    
-        }
-
-        void mainLoop()  
-        {
-
-        }
-
-        void cleanup() 
-        {
-
-        }
-};
-
-int tela() 
+int screen()
 {
     glfwInit();
     
@@ -92,20 +67,6 @@ int tela()
     glfwTerminate();
 
     return 0;
-}
-
-int triangle() 
-{
-    HelloTriangleApplication app;
-
-    try {
-        app.run();
-    } catch (const std::runtime_error& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return EXIT_FAILURE;
-    }
-    
-    return EXIT_SUCCESS;
 }
 
 int project()
@@ -155,15 +116,20 @@ int project()
     // simple demo program, so we just finish up right away.
 
     vkDestroyInstance(instance, NULL);
+
+	return 0;
 }
 
 int main()
 {    
+	//This was the template code for the Vulkan project
 	//project(); 
 
-	//tela();
+	//This is the code for the GLFW window with Vulkan support and inicial testing
+	//screen();
 
-	triangle();
+	// With this treasure, I summon Three-Handled Sword Divergent Sila Divine General T R I A N G U L O
+    triangle();
 
     return 0;
 }

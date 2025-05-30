@@ -1,1 +1,1 @@
-Learning Vulkan, this is my Vulkan Sandbox!
+I'm learning Vulkan, so this is my Vulkan Sandbox!

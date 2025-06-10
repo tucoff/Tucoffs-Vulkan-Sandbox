@@ -1,4 +1,4 @@
-# Hello World, I'm Artur Raffael (`Tucoff`)! 👋
+# Hello World, I'm Artur Raffael (`tucoff`)! 👋
 
 <p align="center">
   **I'm on a journey to deeply understand Vulkan and game engines from the ground up.** During this process, I'll be crafting a grand sandbox project, blending bits and pieces of everything I know. My goal is to continuously expand my knowledge and keep learning forever.

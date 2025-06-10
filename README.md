@@ -1,17 +1,4 @@
-<h1 align="center">Hi, I'm <span id="name-animation">Tucoff</span>! 👋</h1>
-
-<script>
-  const names = ["Tucoff", "Artur Raffael"];
-  let index = 0;
-  const nameElement = document.getElementById("name-animation");
-
-  function animateName() {
-    nameElement.textContent = names[index];
-    index = (index + 1) % names.length;
-  }
-
-  setInterval(animateName, 2000); // Change name every 2 seconds
-</script>
+<h1 align="center">Hi, I'm Artur Raffael! 👋</h1>
 
 <p align="center">
   🔧 Focused on development with C++, C#, C, Python, and Lua<br>
@@ -48,8 +35,8 @@
 ### 📊 GitHub Statistics
 
 <p align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=seu-usuario&show_icons=true&theme=tokyonight" width="48%" />
-  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=seu-usuario&layout=compact&theme=tokyonight" width="48%" />
+  <img src="https://github-readme-stats.vercel.app/api?username=tucoff&show_icons=true&theme=tokyonight" width="48%" />
+  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=tucoff&layout=compact&theme=tokyonight" width="48%" />
 </p>
 
 ---

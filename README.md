@@ -1,4 +1,8 @@
-<h1 align="center">Hi, I'm Artur Raffael! 👋</h1>
+# Hello World, I'm Artur Raffael (`Tucoff`)! 👋
+
+<p align="center">
+  **I'm on a journey to deeply understand Vulkan and game engines from the ground up.** During this process, I'll be crafting a grand sandbox project, blending bits and pieces of everything I know. My goal is to continuously expand my knowledge and keep learning forever.
+</p>
 
 <p align="center">
   🔧 Focused on development with C++, C#, C, Python, and Lua<br>
@@ -18,26 +22,9 @@
 ![Lua](https://img.shields.io/badge/-Lua-2C2D72?style=flat&logo=lua&logoColor=white)
 
 #### 🔧 Technologies
-![Unity](https://img.shields.io/badge/-Unity-000000?style=flat&logo=unity&logoColor=white)
 ![Vulkan](https://img.shields.io/badge/-Vulkan-B12A34?style=flat&logo=vulkan&logoColor=white)
 ![Qiskit](https://img.shields.io/badge/-Qiskit-6929C4?style=flat&logo=ibm&logoColor=white)
-
----
-
-### 📌 Featured Repositories
-
-- 🧠 [Qiskit Decoder: Shor's Code Implementation](https://github.com/seu-usuario/qiskit-shor-decoder)
-- 🎮 [Battle Card Game with Unity and Vuforia](https://github.com/seu-usuario/battlecard-unity-vuforia)
-- 🧪 [Test Case Generator with GPT-4 + Squash TM](https://github.com/seu-usuario/testgen-llm)
-
----
-
-### 📊 GitHub Statistics
-
-<p align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=tucoff&show_icons=true&theme=tokyonight" width="48%" />
-  <img src="https://github-readme-stats.vercel.app/api/top-langs/?username=tucoff&layout=compact&theme=tokyonight" width="48%" />
-</p>
+![Unity](https://img.shields.io/badge/-Unity-000000?style=flat&logo=unity&logoColor=white)
 
 ---
 

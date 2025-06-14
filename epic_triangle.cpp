@@ -25,6 +25,12 @@ const std::vector<const char*> validationLayers =
     "VK_LAYER_KHRONOS_validation"
 };
 
+// A vector of C-style strings containing the names of Vulkan device extensions to enable.
+const std::vector<const char*> deviceExtensions = 
+{
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
 // Conditional compilation to enable or disable validation layers based on the build configuration.
 // If NDEBUG (No Debug) is defined, validation layers are disabled for release builds.
 // Otherwise, they are enabled for debug builds.
@@ -303,8 +309,8 @@ private:
 
         createInfo.pEnabledFeatures = &deviceFeatures;
 
-        // No device extensions required at this stage
-        createInfo.enabledExtensionCount = 0;
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());;
+        createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
         // Enable validation layers if requested
         if (enableValidationLayers) {
@@ -366,9 +372,34 @@ private:
         // Find the queue families supported by this device.
         QueueFamilyIndices indices = findQueueFamilies(device);
 
+		// Check if the device supports the required extensions.
+        bool extensionsSupported = checkDeviceExtensionSupport(device);
+
         // A device is suitable if it has all the required queue families (e.g., graphics).
         return indices.isComplete();
     }
+
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    {
+        // Get the number of available device extensions.
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+        // If no extensions are available, return false.
+        if (extensionCount == 0) return false;
+        // Allocate a vector to hold the properties of all available extensions.
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        // Get the properties of all available device extensions.
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+        // Create a set from the required device extensions for easy lookup.
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+        // Iterate through each available extension.
+        for (const auto& extension : availableExtensions)
+        {
+            requiredExtensions.erase(extension.extensionName); // Remove found extensions from the set.
+        }
+        // If the set is empty, all required extensions are supported.
+        return requiredExtensions.empty();
+	}
 
     // Finds the queue families supported by a given physical device.
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)

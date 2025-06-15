@@ -2,6 +2,7 @@
 #include "epic_triangle.h"          // Include the header file for this module
 #define VK_USE_PLATFORM_WIN32_KHR   // Define this to use the Win32 platform for Vulkan
 #define GLFW_INCLUDE_VULKAN         // Define this to include Vulkan-specific headers with GLFW
+#define NOMINMAX				    // Prevent Windows from defining min and max macros that conflict with C++ standard library
 #include <GLFW/glfw3.h>             // Include GL framework for window management and input handling
 #define GLFW_EXPOSE_NATIVE_WIN32    // Define this to expose native window functions for GLFW on Windows
 #include <GLFW/glfw3native.h>       // Include native GLFW functions for Win32
@@ -12,6 +13,9 @@
 #include <cstdlib>                  // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
 #include <optional>                 // For using std::optional to represent potentially absent values
 #include <set> 				        // For using std::set to store unique values
+#include<cstdint>                   //Necessary for uint32_t
+#include<limits>                    //Necessary for std::numeric_limits
+#include<algorithm>                 //Necessary for std::clamp
 
 // Define the width of the application window
 const uint32_t WIDTH = 800;
@@ -85,6 +89,13 @@ struct QueueFamilyIndices
     {
 		return graphicsFamily.has_value() && presentFamily.has_value(); // Returns true if a graphics family and a present family index are present.
     }
+};
+
+struct SwapChainSupportDetails
+{
+	VkSurfaceCapabilitiesKHR capabilities = {}; // Surface capabilities, such as image count and size limits.
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
 };
 
 // Main application class for rendering a triangle with Vulkan.
@@ -375,8 +386,16 @@ private:
 		// Check if the device supports the required extensions.
         bool extensionsSupported = checkDeviceExtensionSupport(device);
 
-        // A device is suitable if it has all the required queue families (e.g., graphics).
-        return indices.isComplete();
+        bool swapChainAdequate = false;
+
+        if (extensionsSupported)
+        {
+            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+
+            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        }
+
+        return indices.isComplete() && extensionsSupported && swapChainAdequate;
     }
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device)
@@ -445,6 +464,98 @@ private:
         }
 
         return indices; // Return the found queue family indices.
+    }
+
+	// Queries the swap chain support details for a given physical device.
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) 
+    {
+		// Create a SwapChainSupportDetails structure to hold the details.
+        SwapChainSupportDetails details;
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+      
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+        
+        if (formatCount != 0) 
+        {
+            details.formats.resize(formatCount);
+            
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+        }
+
+        uint32_t presentModeCount;
+        
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+        
+        if (presentModeCount != 0) 
+        {
+            details.presentModes.resize(presentModeCount);
+            
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());            
+        }
+
+        return details;
+    }
+
+	// Chooses the best surface format from the available formats.
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) 
+    {
+		// If there is only one available format and it is VK_FORMAT_UNDEFINED, return it.
+        for (const auto& availableFormat : availableFormats) 
+        {
+			// If the format is VK_FORMAT_UNDEFINED, it means no specific format is preferred.
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
+            {
+                return availableFormat;
+            }
+        }
+
+		// If no preferred format is found, return the first available format.
+        return availableFormats[0];
+    }
+
+	// Chooses the best present mode from the available present modes.
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
+    {
+		// Iterate through the available present modes to find the best one.
+        for (const auto& availablePresentMode : availablePresentModes) 
+        {
+			// If mailbox mode is available, it is preferred for its low latency and triple buffering.
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
+            {
+                return availablePresentMode;
+            }
+        }
+
+		// If mailbox mode is not available, use FIFO mode, which is the default and ensures images are presented in order.
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+	// Chooses the swap extent based on the surface capabilities.
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) 
+    {
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+        {
+            return capabilities.currentExtent;
+        }
+        else 
+        {
+            int width, height;
+            
+            glfwGetFramebufferSize(window, &width, &height);
+                
+            VkExtent2D actualExtent = 
+            {
+                static_cast<uint32_t>(width),
+                static_cast<uint32_t>(height)
+            };
+               
+            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+                
+            return actualExtent;
+        }
     }
 
     // Retrieves the list of required Vulkan instance extensions.

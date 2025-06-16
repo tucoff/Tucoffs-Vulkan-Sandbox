@@ -118,9 +118,15 @@ private:
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;       // Vulkan debug messenger object.
     VkSurfaceKHR surface = VK_NULL_HANDLE;						    // Vulkan surface for rendering to the window.
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;               // Handle to the selected physical device (GPU). 
+	VkPhysicalDeviceFeatures supportedPhysicalDeviceFeatures = {};  // Structure to hold the features supported by the physical device.
     VkDevice device = VK_NULL_HANDLE;                               // Vulkan logical device object.
     VkQueue graphicsQueue = VK_NULL_HANDLE;                         // Handle to the graphics queue.
 	VkQueue presentQueue = VK_NULL_HANDLE;                          // Handle to the present queue (for displaying images on the surface).
+	VkSwapchainKHR swapChain = VK_NULL_HANDLE;                      // Vulkan swap chain for managing images to be presented.
+	std::vector<VkImage> swapChainImages = {};                      // Vector to hold the images in the swap chain.
+	VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;            // Format of the swap chain images.
+	VkExtent2D swapChainExtent = {};                                // Extent (size) of the swap chain images.
+	std::vector<VkImageView> swapChainImageViews = {};              // Vector to hold image views for the swap chain images.
 
     // Initializes the GLFW window.
     void initWindow()
@@ -144,6 +150,8 @@ private:
 		createSurface();         // Create a Vulkan surface for rendering.
         pickPhysicalDevice();    // Select a suitable physical device (GPU).
         createLogicalDevice();   // Create the logical device.
+		createSwapChain();       // Create the swap chain for presenting images to the surface.
+		createImageViews();      // Create image views for the swap chain images.
     }
 
     // The main application loop where events are polled.
@@ -159,11 +167,20 @@ private:
     // Cleans up all allocated Vulkan and GLFW resources.
     void cleanup()
     {
+		// Destroy all image views created for the swap chain images.
+        for (auto imageView : swapChainImageViews) 
+        {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
         // Destroy the debug messenger if validation layers were enabled.
         if (enableValidationLayers)
         {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
+
+		// Destroy the Vulkan swap chain.
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
 
         // Destroy the Vulkan logical device.
         vkDestroyDevice(device, nullptr);
@@ -285,6 +302,45 @@ private:
         }
     }
 
+    // Selects a suitable physical device (GPU) for Vulkan operations.
+    void pickPhysicalDevice()
+    {
+        uint32_t deviceCount = 0;
+        // Query the number of available physical devices.
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+        // If no physical devices are found, throw an error.
+        if (deviceCount == 0)
+        {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+
+        // Allocate a vector to hold handles to all physical devices.
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        // Get the handles to all physical devices.
+        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+        // Iterate through the available devices to find a suitable one.
+        for (const auto& device : devices) {
+            VkPhysicalDeviceFeatures currentDeviceFeatures;
+            vkGetPhysicalDeviceFeatures(device, &currentDeviceFeatures); // Query here!
+
+            // You might add checks here if you *need* specific features to be present
+            // if (currentDeviceFeatures.samplerAnisotropy && isDeviceSuitable(device)) {
+            if (isDeviceSuitable(device)) {
+                physicalDevice = device;
+                vkGetPhysicalDeviceFeatures(device, &supportedPhysicalDeviceFeatures); // Store ALL supported features
+                break;
+            }
+        }
+
+        // If no suitable physical device was found, throw an error.
+        if (physicalDevice == VK_NULL_HANDLE)
+        {
+            throw std::runtime_error("failed to find a suitable GPU!");
+        }
+    }
+
     // Creates the Vulkan logical device.
     void createLogicalDevice()
     {
@@ -307,33 +363,46 @@ private:
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        // Specify device features (none required for now)
-        VkPhysicalDeviceFeatures deviceFeatures{};
+        // Crie uma nova estrutura para as features *a serem habilitadas*
+        VkPhysicalDeviceFeatures enabledFeatures = {};
 
-        // Fill out the logical device creation info
+        // Habilite APENAS as features que você PRECISA.
+        // Por exemplo, se você precisar de samplerAnisotropy:
+        // if (supportedPhysicalDeviceFeatures.samplerAnisotropy) {
+        //    enabledFeatures.samplerAnisotropy = VK_TRUE;
+        // }
+
+        // Para robustBufferAccess, você PODE explicitamente DESABILITÁ-LO
+        // se você não precisar dele para depuração ou segurança extrema,
+        // ou se o driver estiver o habilitando por padrão.
+        // Se você não precisa dele, não o defina como VK_TRUE.
+        // Como o padrão é VK_FALSE, se você não setar ele pra TRUE, ele estará desabilitado.
+
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
-		// Set the queue create info count and pointer
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-        createInfo.pEnabledFeatures = &deviceFeatures;
+        // Aponte para as features ESPECÍFICAS que você deseja habilitar
+        createInfo.pEnabledFeatures = &enabledFeatures;
 
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());;
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
         // Enable validation layers if requested
-        if (enableValidationLayers) {
+        if (enableValidationLayers) 
+        {
             createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
             createInfo.ppEnabledLayerNames = validationLayers.data();
         }
-        else {
+        else 
+        {
             createInfo.enabledLayerCount = 0;
         }
 
         // Create the logical device
-        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) {
+        if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS) 
+        {
             throw std::runtime_error("failed to create logical device!");
         }
 
@@ -342,60 +411,30 @@ private:
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
     }
 
-    // Selects a suitable physical device (GPU) for Vulkan operations.
-    void pickPhysicalDevice()
-    {
-        uint32_t deviceCount = 0;
-        // Query the number of available physical devices.
-        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-        // If no physical devices are found, throw an error.
-        if (deviceCount == 0)
-        {
-            throw std::runtime_error("failed to find GPUs with Vulkan support!");
-        }
-
-        // Allocate a vector to hold handles to all physical devices.
-        std::vector<VkPhysicalDevice> devices(deviceCount);
-        // Get the handles to all physical devices.
-        vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-        // Iterate through the available devices to find a suitable one.
-        for (const auto& device : devices)
-        {
-            if (isDeviceSuitable(device))
-            {
-                physicalDevice = device; // If suitable, select this device.
-                break;                   // Exit the loop as a suitable device has been found.
-            }
-        }
-
-        // If no suitable physical device was found, throw an error.
-        if (physicalDevice == VK_NULL_HANDLE)
-        {
-            throw std::runtime_error("failed to find a suitable GPU!");
-        }
-    }
-
-    // Checks if a given physical device is suitable for our application.
+	// Checks if the given physical device is suitable for the application.
     bool isDeviceSuitable(VkPhysicalDevice device)
     {
-        // Find the queue families supported by this device.
-        QueueFamilyIndices indices = findQueueFamilies(device);
+		QueueFamilyIndices indices = findQueueFamilies(device); // Find the queue families supported by the device.
+		bool extensionsSupported = checkDeviceExtensionSupport(device); // Check if the required device extensions are supported.
 
-		// Check if the device supports the required extensions.
-        bool extensionsSupported = checkDeviceExtensionSupport(device);
-
+		// Check if the swap chain is adequate for the device.
         bool swapChainAdequate = false;
-
         if (extensionsSupported)
         {
             SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-
             swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
         }
 
-        return indices.isComplete() && extensionsSupported && swapChainAdequate;
+        // Query device features and store them if suitable
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures); // Query here!
+
+        // Ensure the device supports the features you *plan* to enable.
+        // For now, since you're requesting none, this check will always pass.
+        // If you enable features later, you'd add checks like:
+        // bool requiredFeaturesSupported = deviceFeatures.samplerAnisotropy;
+
+        return indices.isComplete() && extensionsSupported && swapChainAdequate; // && requiredFeaturesSupported;
     }
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device)
@@ -466,6 +505,76 @@ private:
         return indices; // Return the found queue family indices.
     }
 
+	// Creates the swap chain for rendering images to the surface.
+    void createSwapChain() 
+    {
+		// Query the swap chain support details for the selected physical device.
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+        
+		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats); // Choose the best surface format from the available formats.
+		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);  // Choose the best present mode from the available present modes.
+		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);                  // Choose the swap extent based on the surface capabilities.
+
+		// Determine the number of images in the swap chain.
+        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+
+		// If the maximum image count is specified and the calculated count exceeds it, use the maximum count.
+        if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) 
+        {
+            imageCount = swapChainSupport.capabilities.maxImageCount;
+        }
+
+		// Create the swap chain create info structure.
+		VkSwapchainCreateInfoKHR createInfo{};                              // Initialize the structure to all zeros.
+		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;     // Specifies the type of the structure.
+		createInfo.surface = surface;                                       // The surface to present images to (created earlier).
+		createInfo.minImageCount = imageCount;                              // Set the minimum number of images in the swap chain.
+		createInfo.imageFormat = surfaceFormat.format;                      // Set the image format for the swap chain.
+		createInfo.imageColorSpace = surfaceFormat.colorSpace;              // Set the color space for the swap chain.
+		createInfo.imageExtent = extent;                                    // Set the extent (size) of the swap chain images.
+		createInfo.imageArrayLayers = 1;                                    // Set the number of layers in the swap chain images (1 for 2D images).
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;        // Set the usage of the swap chain images (color attachment for rendering).
+
+		// Find the queue families for graphics and present operations.
+        QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() }; // Create an array of queue family indices.
+        
+		if (indices.graphicsFamily != indices.presentFamily) // If the graphics and present queue families are different,
+        {
+			// Use concurrent mode for image sharing and allow images to be shared between the two families.
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
+            createInfo.queueFamilyIndexCount = 2; 
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        }
+		else // If they are the same,
+        {    
+			// Use exclusive mode for image sharing and do not share images between different queue families.
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            createInfo.queueFamilyIndexCount = 0; // Optional
+            createInfo.pQueueFamilyIndices = nullptr; // Optional
+        }
+
+		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;   // Use the current transform of the surface capabilities.
+		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;              // Opaque composite alpha mode.
+		createInfo.presentMode = presentMode;                                       // Set the present mode for the swap chain.
+        createInfo.clipped = VK_TRUE;                                               // Enable clipping of images that are not visible.
+		createInfo.oldSwapchain = VK_NULL_HANDLE;                                   // No previous swap chain, as this is the first one.
+
+		// Attempt to create the swap chain with the specified parameters.
+        if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create swap chain!"); // Throw an error if swap chain creation fails.
+        }
+
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
+        swapChainImages.resize(imageCount);
+        vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data()); 
+        
+        swapChainImageFormat = surfaceFormat.format;
+        swapChainExtent = extent;
+    }
+
 	// Queries the swap chain support details for a given physical device.
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) 
     {
@@ -518,15 +627,16 @@ private:
 	// Chooses the best present mode from the available present modes.
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
     {
-		// Iterate through the available present modes to find the best one.
-        for (const auto& availablePresentMode : availablePresentModes) 
-        {
+		// Commenting out the mailbox mode selection for now, as it is not implemented.
+        // Iterate through the available present modes to find the best one.
+        //for (const auto& availablePresentMode : availablePresentModes) 
+        //{
 			// If mailbox mode is available, it is preferred for its low latency and triple buffering.
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
-            {
-                return availablePresentMode;
-            }
-        }
+            //if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
+            //{
+            //    return availablePresentMode;
+            //}
+        //}
 
 		// If mailbox mode is not available, use FIFO mode, which is the default and ensures images are presented in order.
         return VK_PRESENT_MODE_FIFO_KHR;
@@ -555,6 +665,35 @@ private:
             actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
                 
             return actualExtent;
+        }
+    }
+
+	// Creates image views for the swap chain images.
+    void createImageViews() 
+    {
+		// Resize the swapChainImageViews vector to match the number of swap chain images.
+        swapChainImageViews.resize(swapChainImages.size());
+        for (size_t i = 0; i < swapChainImages.size(); i++) 
+        {
+			VkImageViewCreateInfo createInfo{}; 		                                // Initialize the structure to all zeros.
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;                // Specifies the type of the structure.
+			createInfo.image = swapChainImages[i];                                      // The image to create the view for.
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;                                // The type of the image view (2D in this case).
+			createInfo.format = swapChainImageFormat;                                   // The format of the image view (same as swap chain image format).
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the red channel.
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the green channel.
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the blue channel.
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the alpha channel.
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;         // The aspect of the image to view (color in this case).
+			createInfo.subresourceRange.baseMipLevel = 0;                               // The base mip level of the image view.
+			createInfo.subresourceRange.levelCount = 1;                                 // The number of mip levels in the image view.
+			createInfo.subresourceRange.baseArrayLayer = 0;                             // The base array layer of the image view.
+			createInfo.subresourceRange.layerCount = 1;                                 // The number of array layers in the image view.
+
+			// Attempt to create the image view for the swap chain image.
+            if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create image views!");
+            }
         }
     }
 

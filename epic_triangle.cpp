@@ -1,11 +1,8 @@
 // epic_triangle.cpp
 #include "epic_triangle.h"          // Include the header file for this module
-#define VK_USE_PLATFORM_WIN32_KHR   // Define this to use the Win32 platform for Vulkan
+#define VK_USE_PLATFORM_XCB_KHR   // Define this to use the Win32 platform for Vulkan
 #define GLFW_INCLUDE_VULKAN         // Define this to include Vulkan-specific headers with GLFW
-#define NOMINMAX				    // Prevent Windows from defining min and max macros that conflict with C++ standard library
 #include <GLFW/glfw3.h>             // Include GL framework for window management and input handling
-#define GLFW_EXPOSE_NATIVE_WIN32    // Define this to expose native window functions for GLFW on Windows
-#include <GLFW/glfw3native.h>       // Include native GLFW functions for Win32
 #include <iostream>                 // For standard input/output operations (e.g., std::cerr)
 #include <stdexcept>                // For standard exception handling (e.g., std::runtime_error)
 #include <vector>                   // For using std::vector dynamic arrays
@@ -131,6 +128,7 @@ private:
     // Initializes the GLFW window.
     void initWindow()
     {
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11); // Adicione isso antes de glfwInit()
         glfwInit(); // Initialize the GLFW library.
 
         // Tell GLFW not to create an OpenGL context, as we are using Vulkan.
@@ -363,27 +361,13 @@ private:
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        // Crie uma nova estrutura para as features *a serem habilitadas*
         VkPhysicalDeviceFeatures enabledFeatures = {};
-
-        // Habilite APENAS as features que você PRECISA.
-        // Por exemplo, se você precisar de samplerAnisotropy:
-        // if (supportedPhysicalDeviceFeatures.samplerAnisotropy) {
-        //    enabledFeatures.samplerAnisotropy = VK_TRUE;
-        // }
-
-        // Para robustBufferAccess, você PODE explicitamente DESABILITÁ-LO
-        // se você não precisar dele para depuração ou segurança extrema,
-        // ou se o driver estiver o habilitando por padrão.
-        // Se você não precisa dele, não o defina como VK_TRUE.
-        // Como o padrão é VK_FALSE, se você não setar ele pra TRUE, ele estará desabilitado.
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
-        // Aponte para as features ESPECÍFICAS que você deseja habilitar
         createInfo.pEnabledFeatures = &enabledFeatures;
 
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());;

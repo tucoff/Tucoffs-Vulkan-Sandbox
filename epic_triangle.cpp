@@ -150,6 +150,7 @@ private:
         createLogicalDevice();   // Create the logical device.
 		createSwapChain();       // Create the swap chain for presenting images to the surface.
 		createImageViews();      // Create image views for the swap chain images.
+        createGraphicsPipeline();// Create the graphics pipeline
     }
 
     // The main application loop where events are polled.
@@ -679,6 +680,11 @@ private:
                 throw std::runtime_error("failed to create image views!");
             }
         }
+    }
+
+    void createGraphicsPipeline()
+    {
+
     }
 
     // Retrieves the list of required Vulkan instance extensions.

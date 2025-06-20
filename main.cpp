@@ -22,17 +22,13 @@ Vulkan Project Template
 Create and destroy a simple Vulkan instance.
 */
 
-#include <iostream>
-
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <iostream>
+#include <GLFW/glfw3.h>
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
-
-#include "epic_triangle.h"
 
 int screen()
 {
@@ -62,6 +58,8 @@ int screen()
 
     return 0;
 }
+
+#include "epic_triangle.h"
 
 int main()
 {    

@@ -1,61 +1,66 @@
-# build/Makefile
+# ────────────────────────────────────────────────────────────────
+# 🛠️  Tucoff's Vulkan Sandbox — Unified Build for All Projects
+#
+# This Makefile compiles:
+#   - main.cpp as a project launcher (text menu)
+#   - All C++ source files in src/*/ as independent projects
+#   - All shaders (vert/frag) in shaders/*/, compiling them to SPIR-V
+#   - Final executable: VulkanSandbox
+# ────────────────────────────────────────────────────────────────
 
-# —————————————————————————————
-# Variáveis ajustáveis
-# —————————————————————————————
-CXX        := g++
-GLSLC      := /usr/bin/glslc
+# Compiler and shader compiler
+CXX      := g++
+GLSLC    := /usr/bin/glslc
 
-# Troque aqui ou por CLI: make PROJECT_ID=2_cube
-PROJECT_ID ?= 1_triangle
+# Final binary name
+TARGET   := ../VulkanSandbox
 
-# —————————————————————————————
-# Diretórios e arquivos
-# —————————————————————————————
-SRC_ROOT    := ../src
-SHADER_ROOT := ../shaders
+# ────────────────
+# Directory structure
+# ────────────────
+SRC_DIR     := ../src
+SHADER_DIRS := $(wildcard ../shaders/*)
 
-MAIN_SRC    := $(SRC_ROOT)/main.cpp
-DEMO_SRCS   := $(wildcard $(SRC_ROOT)/$(PROJECT_ID)/*.cpp)
-ALL_SRCS    := $(MAIN_SRC) $(DEMO_SRCS)
+# Source files
+MAIN_SRC    := $(SRC_DIR)/main.cpp
+PROJECT_SRCS := $(filter-out $(MAIN_SRC), $(wildcard $(SRC_DIR)/*/*.cpp))
 
-VERT_SRC  := $(SHADER_ROOT)/$(PROJECT_ID)/shader.vert
-FRAG_SRC  := $(SHADER_ROOT)/$(PROJECT_ID)/shader.frag
-VERT_SPV  := $(SHADER_ROOT)/$(PROJECT_ID)/shader.vert.spv
-FRAG_SPV  := $(SHADER_ROOT)/$(PROJECT_ID)/shader.frag.spv
-ALL_SPV   := $(VERT_SPV) $(FRAG_SPV)
+# Include all project folders + root src/
+INCLUDES := $(patsubst %, -I%, $(filter-out $(MAIN_SRC), $(wildcard $(SRC_DIR)/*))) -I$(SRC_DIR)
 
-TARGET    := ../VulkanTest_$(PROJECT_ID)
+# Build flags
+CFLAGS   := -std=c++17 -O2 $(INCLUDES)
+LDFLAGS  := -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
 
-# —————————————————————————————
-# Flags de compilação e link
-# —————————————————————————————
-# Note o -DPROJECT_ID=\"$(PROJECT_ID)\" que injeta o ID no main.cpp
-CFLAGS    := -std=c++17 -O2 \
-             -DPROJECT_ID=\"$(PROJECT_ID)\" \
-             -I$(SRC_ROOT) -I$(SRC_ROOT)/$(PROJECT_ID)
-LDFLAGS   := -lglfw -lvulkan -ldl -lpthread -lX11 -lXxf86vm -lXrandr -lXi
+# Shader compilation targets
+SPIRV := $(foreach dir,$(SHADER_DIRS),$(dir)/shader.vert.spv $(dir)/shader.frag.spv)
+VERTS := $(patsubst %.spv,%.vert,$(filter %.vert.spv,$(SPIRV)))
+FRAGS := $(patsubst %.spv,%.frag,$(filter %.frag.spv,$(SPIRV)))
 
-.PHONY: all shaders test clean
+.PHONY: all clean shaders test
 
-# —————————————————————————————
-# Alvos
-# —————————————————————————————
+# ─────────────────────
+# Full project compilation
+# ─────────────────────
 all: shaders $(TARGET)
 
-shaders: $(ALL_SPV)
+# Compile all shaders to SPIR-V
+shaders: $(SPIRV)
 
-$(VERT_SPV): $(VERT_SRC)
+%.vert.spv: %.vert
 	$(GLSLC) $< -o $@
 
-$(FRAG_SPV): $(FRAG_SRC)
+%.frag.spv: %.frag
 	$(GLSLC) $< -o $@
 
-$(TARGET): $(ALL_SRCS)
-	$(CXX) $(CFLAGS) $(ALL_SRCS) -o $@ $(LDFLAGS)
+# Compile main launcher and all project modules
+$(TARGET): $(MAIN_SRC) $(PROJECT_SRCS)
+	$(CXX) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
+# Build and execute the launcher
 test: all
 	$(TARGET)
 
+# Clean all generated files
 clean:
-	rm -f $(TARGET) $(ALL_SPV)
+	rm -f $(TARGET) $(SPIRV)

@@ -4,15 +4,16 @@
 #define GLFW_INCLUDE_VULKAN         // Define this to include Vulkan-specific headers with GLFW
 #include <GLFW/glfw3.h>             // Include GL framework for window management and input handling
 #include <iostream>                 // For standard input/output operations (e.g., std::cerr)
+#include <fstream>                  // For file stream operations (not used in this code, but often included for file I/O)
 #include <stdexcept>                // For standard exception handling (e.g., std::runtime_error)
 #include <vector>                   // For using std::vector dynamic arrays
 #include <cstring>                  // For C-style string manipulation (e.g., strcmp)
 #include <cstdlib>                  // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
 #include <optional>                 // For using std::optional to represent potentially absent values
 #include <set> 				        // For using std::set to store unique values
-#include<cstdint>                   //Necessary for uint32_t
-#include<limits>                    //Necessary for std::numeric_limits
-#include<algorithm>                 //Necessary for std::clamp
+#include <cstdint>                  //Necessary for uint32_t
+#include <limits>                   //Necessary for std::numeric_limits
+#include <algorithm>                //Necessary for std::clamp
 
 // Define the width of the application window
 const uint32_t WIDTH = 800;
@@ -682,9 +683,54 @@ private:
         }
     }
 
+    // Creates the graphics pipeline for rendering.
     void createGraphicsPipeline()
     {
+        // Read the SPIR-V shader code from files.
+        auto vertShaderCode = readFile("../shaders/1_triangle/vert.spv");
+        auto fragShaderCode = readFile("../shaders/1_triangle/frag.spv");
 
+        // Create shader modules for the vertex and fragment shaders.
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        // Create shader stage create info structures for the vertex and fragment shaders.
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        // Create an array of shader stage create info structures.
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        vkDestroyShaderModule(device, fragShaderModule, nullptr); // Destroy the fragment shader module after creating the pipeline.
+        vkDestroyShaderModule(device, vertShaderModule, nullptr); // Destroy the vertex shader module after creating the pipeline.
+    }
+
+    // Creates a shader module from the provided SPIR-V code.
+    VkShaderModule createShaderModule(const std::vector<char>& code) 
+    {
+        // Create a VkShaderModuleCreateInfo structure to hold the shader module creation parameters.
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = code.size();
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        // Attempt to create the shader module using the Vulkan API.
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shader module!");
+        }
+
+        // Return the created shader module.
+        return shaderModule;
     }
 
     // Retrieves the list of required Vulkan instance extensions.
@@ -742,6 +788,31 @@ private:
         }
 
         return true; // All required validation layers are supported.
+    }
+
+    // Reads a file and returns its contents as a vector of characters.
+    static std::vector<char> readFile(const std::string& filename) 
+    {
+        // Open the file in binary mode and move the read pointer to the end to get the file size.
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        // Check if the file was opened successfully.
+        if (!file.is_open()) {
+            throw std::runtime_error("failed to open file!");
+        }
+
+        // Get the size of the file and create a buffer to hold its contents.
+        size_t fileSize = (size_t) file.tellg();
+        std::vector<char> buffer(fileSize);
+
+        // Move the read pointer back to the beginning of the file and read its contents into the buffer.
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+
+        // Close the file after reading its contents.
+        file.close();
+
+        return buffer; // Return the buffer containing the file contents.
     }
 
     // Static callback function for Vulkan debug messages.

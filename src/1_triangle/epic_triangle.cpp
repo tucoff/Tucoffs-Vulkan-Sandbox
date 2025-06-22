@@ -10,7 +10,7 @@
 #include <cstring>                  // For C-style string manipulation (e.g., strcmp)
 #include <cstdlib>                  // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
 #include <optional>                 // For using std::optional to represent potentially absent values
-#include <set> 				        // For using std::set to store unique values
+#include <set>                      // For using std::set to store unique values
 #include <cstdint>                  //Necessary for uint32_t
 #include <limits>                   //Necessary for std::numeric_limits
 #include <algorithm>                //Necessary for std::clamp
@@ -19,6 +19,9 @@
 const uint32_t WIDTH = 800;
 // Define the height of the application window
 const uint32_t HEIGHT = 600;
+
+// Maximum number of frames that can be in flight (processed concurrently)
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 // A vector of C-style strings containing the names of Vulkan validation layers to enable.
 // These layers provide debugging and error checking for Vulkan API usage.
@@ -80,18 +83,18 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 struct QueueFamilyIndices
 {
     std::optional<uint32_t> graphicsFamily; // Index of the queue family that supports graphics operations.
-	std::optional<uint32_t> presentFamily; // Index of the queue family that supports presenting images to a surface (e.g., window).
+    std::optional<uint32_t> presentFamily; // Index of the queue family that supports presenting images to a surface (e.g., window).
 
     // Checks if all required queue families have been found.
     bool isComplete()
     {
-		return graphicsFamily.has_value() && presentFamily.has_value(); // Returns true if a graphics family and a present family index are present.
+        return graphicsFamily.has_value() && presentFamily.has_value(); // Returns true if a graphics family and a present family index are present.
     }
 };
 
 struct SwapChainSupportDetails
 {
-	VkSurfaceCapabilitiesKHR capabilities = {}; // Surface capabilities, such as image count and size limits.
+    VkSurfaceCapabilitiesKHR capabilities = {}; // Surface capabilities, such as image count and size limits.
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
@@ -114,20 +117,29 @@ private:
     GLFWwindow* window = nullptr;                                   // Pointer to the GLFW window object.
     VkInstance instance = VK_NULL_HANDLE;                           // Pointer to the GLFW window object.
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;       // Vulkan debug messenger object.
-    VkSurfaceKHR surface = VK_NULL_HANDLE;						    // Vulkan surface for rendering to the window.
+    VkSurfaceKHR surface = VK_NULL_HANDLE;                          // Vulkan surface for rendering to the window.
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;               // Handle to the selected physical device (GPU). 
-	VkPhysicalDeviceFeatures supportedPhysicalDeviceFeatures = {};  // Structure to hold the features supported by the physical device.
+    VkPhysicalDeviceFeatures supportedPhysicalDeviceFeatures = {};  // Structure to hold the features supported by the physical device.
     VkDevice device = VK_NULL_HANDLE;                               // Vulkan logical device object.
     VkQueue graphicsQueue = VK_NULL_HANDLE;                         // Handle to the graphics queue.
-	VkQueue presentQueue = VK_NULL_HANDLE;                          // Handle to the present queue (for displaying images on the surface).
-	VkSwapchainKHR swapChain = VK_NULL_HANDLE;                      // Vulkan swap chain for managing images to be presented.
-	std::vector<VkImage> swapChainImages = {};                      // Vector to hold the images in the swap chain.
-	VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;            // Format of the swap chain images.
-	VkExtent2D swapChainExtent = {};                                // Extent (size) of the swap chain images.
-	std::vector<VkImageView> swapChainImageViews = {};              // Vector to hold image views for the swap chain images.
+    VkQueue presentQueue = VK_NULL_HANDLE;                          // Handle to the present queue (for displaying images on the surface).
+    VkSwapchainKHR swapChain = VK_NULL_HANDLE;                      // Vulkan swap chain for managing images to be presented.
+    std::vector<VkImage> swapChainImages = {};                      // Vector to hold the images in the swap chain.
+    VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;            // Format of the swap chain images.
+    VkExtent2D swapChainExtent = {};                                // Extent (size) of the swap chain images.
+    std::vector<VkImageView> swapChainImageViews = {};              // Vector to hold image views for the swap chain images.
     VkRenderPass renderPass = VK_NULL_HANDLE;                       // Vulkan render pass object for rendering operations.
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;               // Vulkan pipeline layout for the graphics pipeline.
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;                   // Vulkan graphics pipeline object for rendering.
+    std::vector<VkFramebuffer> swapChainFramebuffers;               // Vector to hold framebuffers for the swap chain images.
+    VkCommandPool commandPool = VK_NULL_HANDLE;                     // Vulkan command pool for managing command buffers.
+    std::vector<VkCommandBuffer> commandBuffers;                    // Vector to hold command buffers for recording rendering commands.
+    std::vector<VkSemaphore> imageAvailableSemaphores;              // Semaphores to signal when an image is available from the swap chain.
+    std::vector<VkSemaphore> renderFinishedSemaphores;              // Semaphores to signal when rendering is finished for a frame.
+    std::vector<VkFence> inFlightFences;                            // Fences to signal when a frame's rendering commands have finished executing.
+    uint32_t currentFrame = 0;                                      // Index of the current frame being processed.
+
+    bool framebufferResized = false;                                // Flag to indicate if the framebuffer has been resized.
 
     // Initializes the GLFW window.
     void initWindow()
@@ -137,11 +149,26 @@ private:
 
         // Tell GLFW not to create an OpenGL context, as we are using Vulkan.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        // Disable window resizing, as it simplifies initial Vulkan setup.
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        // Disable window resizing initially, as it simplifies initial Vulkan setup.
+        // The callback will handle resizing later.
+        // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Removed to allow resizing
 
         // Create the GLFW window with specified width, height, title, and no full-screen or sharing.
-        window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+        window = glfwCreateWindow(WIDTH, HEIGHT, "Triangulo", nullptr, nullptr);
+
+        // Set the user pointer for the window to this HelloTriangleApplication instance,
+        // allowing access to its members from static callbacks.
+        glfwSetWindowUserPointer(window, this);
+        // Set the callback function for framebuffer size changes.
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+    }
+
+    // Static callback function for GLFW framebuffer resize events.
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+        // Retrieve the HelloTriangleApplication instance from the window user pointer.
+        auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        // Set the framebufferResized flag to true to trigger swap chain recreation.
+        app->framebufferResized = true;
     }
 
     // Initializes Vulkan components.
@@ -149,49 +176,76 @@ private:
     {
         createInstance();        // Create the Vulkan instance.
         setupDebugMessenger();   // Set up the debug messenger for validation layers.
-		createSurface();         // Create a Vulkan surface for rendering.
+        createSurface();         // Create a Vulkan surface for rendering.
         pickPhysicalDevice();    // Select a suitable physical device (GPU).
         createLogicalDevice();   // Create the logical device.
-		createSwapChain();       // Create the swap chain for presenting images to the surface.
-		createImageViews();      // Create image views for the swap chain images.
+        createSwapChain();       // Create the swap chain for presenting images to the surface.
+        createImageViews();      // Create image views for the swap chain images.
         createRenderPass();      // Create the render pass.
         createGraphicsPipeline();// Create the graphics pipeline
+        createFramebuffers();    // Create the framebuffer
+        createCommandPool();     // Create the command pool for command buffers.
+        createCommandBuffers();  // Create command buffers for rendering commands.
+        createSyncObjects();     // Create synchronization objects (semaphores and fences).
     }
 
-    // The main application loop where events are polled.
+    // The main application loop where events are polled and frames are drawn.
     void mainLoop()
     {
         // Loop as long as the window should not close (e.g., user clicks the close button).
         while (!glfwWindowShouldClose(window))
         {
             glfwPollEvents(); // Process all pending GLFW events (e.g., keyboard input, mouse movement).
+            drawFrame();      // Draw a single frame.
         }
+
+        // Wait for the device to finish all pending operations before exiting.
+        vkDeviceWaitIdle(device);
+    }
+
+    // Cleans up swap chain-related resources.
+    void cleanupSwapChain() {
+        // Destroy all framebuffers created for the swap chain.
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        // Destroy all image views created for the swap chain images.
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
+        // Destroy the Vulkan swap chain.
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
     }
 
     // Cleans up all allocated Vulkan and GLFW resources.
     void cleanup()
     {
+        cleanupSwapChain(); // Call the function to clean up swap chain resources.
+
+        // Destroy the graphics pipeline, pipeline layout, and render pass.
         vkDestroyPipeline(device, graphicsPipeline, nullptr); // Destroy the graphics pipeline.
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr); // Destroy the pipeline layout.
         vkDestroyRenderPass(device, renderPass, nullptr); // Destroy the render pass.
 
-		// Destroy all image views created for the swap chain images.
-        for (auto imageView : swapChainImageViews) 
-        {
-            vkDestroyImageView(device, imageView, nullptr);
+        // Destroy synchronization objects for each frame in flight.
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr); // Destroy render finished semaphore.
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr); // Destroy image available semaphore.
+            vkDestroyFence(device, inFlightFences[i], nullptr);               // Destroy in flight fence.
         }
+
+        vkDestroyCommandPool(device, commandPool, nullptr); // Destroy the command pool.
+
+        // Destroy the Vulkan logical device.
+        vkDestroyDevice(device, nullptr);
 
         // Destroy the debug messenger if validation layers were enabled.
         if (enableValidationLayers)
         {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
-
-		// Destroy the Vulkan swap chain.
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
-
-        // Destroy the Vulkan logical device.
-        vkDestroyDevice(device, nullptr);
 
         // Destroy the Vulkan surface associated with the GLFW window.
         vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -204,6 +258,28 @@ private:
 
         // Terminate GLFW.
         glfwTerminate();
+    }
+
+    // Recreates the swap chain and related resources after a window resize or swap chain becoming out-of-date.
+    void recreateSwapChain() {
+        int width = 0, height = 0;
+        // Get the current framebuffer size. If minimized, wait until it's not.
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents(); // Wait for events to process the window resize.
+        }
+
+        // Wait for the device to be idle before recreating resources that might be in use.
+        vkDeviceWaitIdle(device);
+
+        cleanupSwapChain(); // Clean up existing swap chain resources.
+
+        createSwapChain();    // Create a new swap chain.
+        createImageViews();   // Create new image views for the new swap chain images.
+        createFramebuffers(); // Create new framebuffers for the new image views.
+        // Command buffers don't need to be recreated because they don't depend on swap chain images directly,
+        // only on the render pass and framebuffers, which are recreated.
     }
 
     // Creates the Vulkan instance.
@@ -300,13 +376,13 @@ private:
         }
     }
 
-	// Creates a Vulkan surface for rendering to the GLFW window.
+    // Creates a Vulkan surface for rendering to the GLFW window.
     void createSurface() 
     {
-		// Check if the GLFW window is valid before creating the surface.
+        // Check if the GLFW window is valid before creating the surface.
         if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) 
         {
-			throw std::runtime_error("failed to create window surface!"); // Throw an error if surface creation fails.
+            throw std::runtime_error("failed to create window surface!"); // Throw an error if surface creation fails.
         }
     }
 
@@ -405,13 +481,13 @@ private:
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
     }
 
-	// Checks if the given physical device is suitable for the application.
+    // Checks if the given physical device is suitable for the application.
     bool isDeviceSuitable(VkPhysicalDevice device)
     {
-		QueueFamilyIndices indices = findQueueFamilies(device); // Find the queue families supported by the device.
-		bool extensionsSupported = checkDeviceExtensionSupport(device); // Check if the required device extensions are supported.
+        QueueFamilyIndices indices = findQueueFamilies(device); // Find the queue families supported by the device.
+        bool extensionsSupported = checkDeviceExtensionSupport(device); // Check if the required device extensions are supported.
 
-		// Check if the swap chain is adequate for the device.
+        // Check if the swap chain is adequate for the device.
         bool swapChainAdequate = false;
         if (extensionsSupported)
         {
@@ -451,7 +527,7 @@ private:
         }
         // If the set is empty, all required extensions are supported.
         return requiredExtensions.empty();
-	}
+    }
 
     // Finds the queue families supported by a given physical device.
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
@@ -477,14 +553,14 @@ private:
                 indices.graphicsFamily = i; // Store the index if it supports graphics.
             }
 
-			// Check if the queue family supports presenting images to a surface.
+            // Check if the queue family supports presenting images to a surface.
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
-			// If the queue family supports presenting, store its index.
+            // If the queue family supports presenting, store its index.
             if (presentSupport) 
             {
-				indices.presentFamily = i; // Store the index
+                indices.presentFamily = i; // Store the index
             }
 
             // If all required queue families have been found, stop searching.
@@ -499,63 +575,63 @@ private:
         return indices; // Return the found queue family indices.
     }
 
-	// Creates the swap chain for rendering images to the surface.
+    // Creates the swap chain for rendering images to the surface.
     void createSwapChain() 
     {
-		// Query the swap chain support details for the selected physical device.
+        // Query the swap chain support details for the selected physical device.
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
         
-		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats); // Choose the best surface format from the available formats.
-		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);  // Choose the best present mode from the available present modes.
-		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);                  // Choose the swap extent based on the surface capabilities.
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats); // Choose the best surface format from the available formats.
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);  // Choose the best present mode from the available present modes.
+        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);                  // Choose the swap extent based on the surface capabilities.
 
-		// Determine the number of images in the swap chain.
+        // Determine the number of images in the swap chain.
         uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
-		// If the maximum image count is specified and the calculated count exceeds it, use the maximum count.
+        // If the maximum image count is specified and the calculated count exceeds it, use the maximum count.
         if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) 
         {
             imageCount = swapChainSupport.capabilities.maxImageCount;
         }
 
-		// Create the swap chain create info structure.
-		VkSwapchainCreateInfoKHR createInfo{};                              // Initialize the structure to all zeros.
-		createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;     // Specifies the type of the structure.
-		createInfo.surface = surface;                                       // The surface to present images to (created earlier).
-		createInfo.minImageCount = imageCount;                              // Set the minimum number of images in the swap chain.
-		createInfo.imageFormat = surfaceFormat.format;                      // Set the image format for the swap chain.
-		createInfo.imageColorSpace = surfaceFormat.colorSpace;              // Set the color space for the swap chain.
-		createInfo.imageExtent = extent;                                    // Set the extent (size) of the swap chain images.
-		createInfo.imageArrayLayers = 1;                                    // Set the number of layers in the swap chain images (1 for 2D images).
-		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;        // Set the usage of the swap chain images (color attachment for rendering).
+        // Create the swap chain create info structure.
+        VkSwapchainCreateInfoKHR createInfo{};                              // Initialize the structure to all zeros.
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;     // Specifies the type of the structure.
+        createInfo.surface = surface;                                       // The surface to present images to (created earlier).
+        createInfo.minImageCount = imageCount;                              // Set the minimum number of images in the swap chain.
+        createInfo.imageFormat = surfaceFormat.format;                      // Set the image format for the swap chain.
+        createInfo.imageColorSpace = surfaceFormat.colorSpace;              // Set the color space for the swap chain.
+        createInfo.imageExtent = extent;                                    // Set the extent (size) of the swap chain images.
+        createInfo.imageArrayLayers = 1;                                    // Set the number of layers in the swap chain images (1 for 2D images).
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;        // Set the usage of the swap chain images (color attachment for rendering).
 
-		// Find the queue families for graphics and present operations.
+        // Find the queue families for graphics and present operations.
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-		uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() }; // Create an array of queue family indices.
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() }; // Create an array of queue family indices.
         
-		if (indices.graphicsFamily != indices.presentFamily) // If the graphics and present queue families are different,
+        if (indices.graphicsFamily != indices.presentFamily) // If the graphics and present queue families are different,
         {
-			// Use concurrent mode for image sharing and allow images to be shared between the two families.
+            // Use concurrent mode for image sharing and allow images to be shared between the two families.
             createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
             createInfo.queueFamilyIndexCount = 2; 
             createInfo.pQueueFamilyIndices = queueFamilyIndices;
         }
-		else // If they are the same,
+        else // If they are the same,
         {    
-			// Use exclusive mode for image sharing and do not share images between different queue families.
+            // Use exclusive mode for image sharing and do not share images between different queue families.
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
             createInfo.queueFamilyIndexCount = 0; // Optional
             createInfo.pQueueFamilyIndices = nullptr; // Optional
         }
 
-		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;   // Use the current transform of the surface capabilities.
-		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;              // Opaque composite alpha mode.
-		createInfo.presentMode = presentMode;                                       // Set the present mode for the swap chain.
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;   // Use the current transform of the surface capabilities.
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;              // Opaque composite alpha mode.
+        createInfo.presentMode = presentMode;                                       // Set the present mode for the swap chain.
         createInfo.clipped = VK_TRUE;                                               // Enable clipping of images that are not visible.
-		createInfo.oldSwapchain = VK_NULL_HANDLE;                                   // No previous swap chain, as this is the first one.
+        createInfo.oldSwapchain = VK_NULL_HANDLE;                                   // No previous swap chain, as this is the first one.
 
-		// Attempt to create the swap chain with the specified parameters.
+        // Attempt to create the swap chain with the specified parameters.
         if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create swap chain!"); // Throw an error if swap chain creation fails.
@@ -569,10 +645,10 @@ private:
         swapChainExtent = extent;
     }
 
-	// Queries the swap chain support details for a given physical device.
+    // Queries the swap chain support details for a given physical device.
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) 
     {
-		// Create a SwapChainSupportDetails structure to hold the details.
+        // Create a SwapChainSupportDetails structure to hold the details.
         SwapChainSupportDetails details;
 
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -601,42 +677,41 @@ private:
         return details;
     }
 
-	// Chooses the best surface format from the available formats.
+    // Chooses the best surface format from the available formats.
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) 
     {
-		// If there is only one available format and it is VK_FORMAT_UNDEFINED, return it.
+        // If there is only one available format and it is VK_FORMAT_UNDEFINED, return it.
         for (const auto& availableFormat : availableFormats) 
         {
-			// If the format is VK_FORMAT_UNDEFINED, it means no specific format is preferred.
+            // If the format is VK_FORMAT_UNDEFINED, it means no specific format is preferred.
             if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
             {
                 return availableFormat;
             }
         }
 
-		// If no preferred format is found, return the first available format.
+        // If no preferred format is found, return the first available format.
         return availableFormats[0];
     }
 
-	// Chooses the best present mode from the available present modes.
+    // Chooses the best present mode from the available present modes.
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes)
     {
-		// Commenting out the mailbox mode selection for now, as it is not implemented.
         // Iterate through the available present modes to find the best one.
-        //for (const auto& availablePresentMode : availablePresentModes) 
-        //{
-			// If mailbox mode is available, it is preferred for its low latency and triple buffering.
-            //if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
-            //{
-            //    return availablePresentMode;
-            //}
-        //}
+        for (const auto& availablePresentMode : availablePresentModes) 
+        {
+            // If mailbox mode is available, it is preferred for its low latency and triple buffering.
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
+            {
+                return availablePresentMode;
+            }
+        }
 
-		// If mailbox mode is not available, use FIFO mode, which is the default and ensures images are presented in order.
+        // If mailbox mode is not available, use FIFO mode, which is the default and ensures images are presented in order.
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
-	// Chooses the swap extent based on the surface capabilities.
+    // Chooses the swap extent based on the surface capabilities.
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) 
     {
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
@@ -662,29 +737,29 @@ private:
         }
     }
 
-	// Creates image views for the swap chain images.
+    // Creates image views for the swap chain images.
     void createImageViews() 
     {
-		// Resize the swapChainImageViews vector to match the number of swap chain images.
+        // Resize the swapChainImageViews vector to match the number of swap chain images.
         swapChainImageViews.resize(swapChainImages.size());
         for (size_t i = 0; i < swapChainImages.size(); i++) 
         {
-			VkImageViewCreateInfo createInfo{}; 		                                // Initialize the structure to all zeros.
-			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;                // Specifies the type of the structure.
-			createInfo.image = swapChainImages[i];                                      // The image to create the view for.
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;                                // The type of the image view (2D in this case).
-			createInfo.format = swapChainImageFormat;                                   // The format of the image view (same as swap chain image format).
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the red channel.
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the green channel.
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the blue channel.
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the alpha channel.
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;         // The aspect of the image to view (color in this case).
-			createInfo.subresourceRange.baseMipLevel = 0;                               // The base mip level of the image view.
-			createInfo.subresourceRange.levelCount = 1;                                 // The number of mip levels in the image view.
-			createInfo.subresourceRange.baseArrayLayer = 0;                             // The base array layer of the image view.
-			createInfo.subresourceRange.layerCount = 1;                                 // The number of array layers in the image view.
+            VkImageViewCreateInfo createInfo{};                                         // Initialize the structure to all zeros.
+            createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;                // Specifies the type of the structure.
+            createInfo.image = swapChainImages[i];                                      // The image to create the view for.
+            createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;                                // The type of the image view (2D in this case).
+            createInfo.format = swapChainImageFormat;                                   // The format of the image view (same as swap chain image format).
+            createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the red channel.
+            createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the green channel.
+            createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the blue channel.
+            createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;                    // Identity swizzle for the alpha channel.
+            createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;         // The aspect of the image to view (color in this case).
+            createInfo.subresourceRange.baseMipLevel = 0;                               // The base mip level of the image view.
+            createInfo.subresourceRange.levelCount = 1;                                 // The number of mip levels in the image view.
+            createInfo.subresourceRange.baseArrayLayer = 0;                             // The base array layer of the image view.
+            createInfo.subresourceRange.layerCount = 1;                                 // The number of array layers in the image view.
 
-			// Attempt to create the image view for the swap chain image.
+            // Attempt to create the image view for the swap chain image.
             if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
                 throw std::runtime_error("failed to create image views!");
             }
@@ -713,12 +788,25 @@ private:
         subpass.colorAttachmentCount = 1; // There is one color attachment in this sub
         subpass.pColorAttachments = &colorAttachmentRef; // Set the color attachment reference for the subpass.
 
+        // Subpass dependency to ensure layout transitions happen correctly.
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL; // Refers to the implicit subpass before or after the render pass.
+        dependency.dstSubpass = 0;                   // Refers to our subpass (index 0).
+        // Operations that must happen before our subpass.
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        // Operations that will wait on the source.
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo renderPassInfo{}; // Create a structure to hold the render pass creation information.
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO; // Specifies the type
         renderPassInfo.attachmentCount = 1; // There is one attachment in the render pass.
         renderPassInfo.pAttachments = &colorAttachment; // Set the color attachment description.
         renderPassInfo.subpassCount = 1; // There is one subpass in the render pass.
-        renderPassInfo.pSubpasses = &subpass; // Set the
+        renderPassInfo.pSubpasses = &subpass; // Set the subpass description.
+        renderPassInfo.dependencyCount = 1; // Number of subpass dependencies.
+        renderPassInfo.pDependencies = &dependency; // Pointer to the subpass dependencies.
 
         if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) 
         {
@@ -806,7 +894,7 @@ private:
         colorBlending.blendConstants[2] = 0.0f;
         colorBlending.blendConstants[3] = 0.0f;
 
-        // Create the dynamic state create info structure.
+        // Define dynamic states that can be changed without recreating the pipeline.
         std::vector<VkDynamicState> dynamicStates = 
         {
             VK_DYNAMIC_STATE_VIEWPORT,
@@ -875,6 +963,236 @@ private:
 
         // Return the created shader module.
         return shaderModule;
+    }
+
+    // Creates framebuffers for each swap chain image view.
+    void createFramebuffers()
+    {
+        // Resize the framebuffers vector to match the number of swap chain image views.
+        swapChainFramebuffers.resize(swapChainImageViews.size());
+
+        // Iterate through each swap chain image view to create a framebuffer.
+        for (size_t i = 0; i < swapChainImageViews.size(); i++) 
+        {
+            VkImageView attachments[] = { swapChainImageViews[i] }; // Attach the current image view to the framebuffer.
+
+            // Create the framebuffer create info structure.
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = renderPass; // The render pass to use with this framebuffer.
+            framebufferInfo.attachmentCount = 1; // Number of attachments in the framebuffer.
+            framebufferInfo.pAttachments = attachments; // The array of attachments.
+            framebufferInfo.width = swapChainExtent.width; // Width of the framebuffer.
+            framebufferInfo.height = swapChainExtent.height; // Height of the framebuffer.
+            framebufferInfo.layers = 1; // Number of layers in the framebuffer.
+
+            // Attempt to create the framebuffer using the Vulkan API.
+            if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) 
+            {
+                throw std::runtime_error("failed to create framebuffer!");
+            }
+        }
+    }
+
+    // Creates a command pool for managing command buffers.
+    void createCommandPool()
+    {
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice); // Find the queue families for the physical device.
+
+        // Create a command pool create info structure.
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // Allow command buffers to be reset individually.
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(); // Use the graphics queue family index.
+
+        // Attempt to create the command pool using the Vulkan API.
+        if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create command pool!");
+        }
+    }
+
+    // Creates command buffers for recording rendering commands.
+    void createCommandBuffers()
+    {
+        // Resize the command buffers vector to match MAX_FRAMES_IN_FLIGHT.
+        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+        // Allocate command buffers from the command pool.
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)commandBuffers.size(); // Allocate enough command buffers.
+
+        if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to allocate command buffers!");
+        }
+    }
+
+    // Records commands into a specific command buffer for rendering.
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+        // Begin recording commands into the command buffer.
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // No flags for this command buffer, as it's reset each frame.
+        // beginInfo.flags = 0; 
+        // beginInfo.pInheritanceInfo = nullptr; // Not used for primary command buffers.
+
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("failed to begin recording command buffer!");
+        }
+
+        // Begin the render pass.
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = renderPass;                              // The render pass to use.
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];      // The framebuffer for the current swap chain image.
+        renderPassInfo.renderArea.offset = {0, 0};                           // Offset for the render area.
+        renderPassInfo.renderArea.extent = swapChainExtent;                  // Extent (size) for the render area.
+
+        // Clear value for the color attachment (black, opaque).
+        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        renderPassInfo.clearValueCount = 1;         // Number of clear values.
+        renderPassInfo.pClearValues = &clearColor;  // Pointer to the clear values.
+
+        // Begin the render pass with inline command execution.
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            // Bind the graphics pipeline.
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+            // Set the dynamic viewport.
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float) swapChainExtent.width;
+            viewport.height = (float) swapChainExtent.height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            // Set the dynamic scissor rectangle.
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        // End the render pass.
+        vkCmdEndRenderPass(commandBuffer);
+
+        // End recording commands into the command buffer.
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to record command buffer!");
+        }
+    }
+
+    // Creates synchronization objects (semaphores and fences) for frame management.
+    void createSyncObjects() {
+        // Resize vectors to hold synchronization objects for each frame in flight.
+        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
+        // Semaphore creation info.
+        VkSemaphoreCreateInfo semaphoreInfo{};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        // Fence creation info, initialized as signaled to allow the first frame to proceed.
+        VkFenceCreateInfo fenceInfo{};
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Create in a signaled state.
+
+        // Create semaphores and fences for each frame.
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+                throw std::runtime_error("failed to create synchronization objects for a frame!");
+            }
+        }
+    }
+
+    // Draws a single frame of the application.
+    void drawFrame() {
+        // Wait for the fence of the current frame to be signaled (previous frame finished).
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        uint32_t imageIndex;
+        // Acquire an image from the swap chain. The imageAvailableSemaphore will be signaled when an image is ready.
+        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+        // Handle swap chain being out-of-date or suboptimal (e.g., window resized).
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapChain(); // Recreate the swap chain.
+            return;
+        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            throw std::runtime_error("failed to acquire swap chain image!");
+        }
+
+        // Reset the fence for the current frame before submitting new commands.
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
+        // Reset and record the command buffer for the current frame and image index.
+        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+        // Submit information to the graphics queue.
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        // Specify semaphores to wait on before execution.
+        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
+        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+
+        // Specify the command buffer to execute.
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+        // Specify semaphores to signal after execution.
+        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        // Submit the command buffer to the graphics queue, signaling the fence upon completion.
+        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to submit draw command buffer!");
+        }
+
+        // Present information to the present queue.
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        // Specify semaphores to wait on before presenting.
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        // Specify the swap chains and image indices to present.
+        VkSwapchainKHR swapChains[] = {swapChain};
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+        presentInfo.pImageIndices = &imageIndex;
+
+        // Queue the presentation operation.
+        result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        // Handle presentation results that require swap chain recreation.
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+            framebufferResized = false; // Reset the flag.
+            recreateSwapChain();        // Recreate the swap chain.
+        } else if (result != VK_SUCCESS) {
+            throw std::runtime_error("failed to present swap chain image!");
+        }
+
+        // Advance to the next frame, wrapping around if MAX_FRAMES_IN_FLIGHT is reached.
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     // Retrieves the list of required Vulkan instance extensions.

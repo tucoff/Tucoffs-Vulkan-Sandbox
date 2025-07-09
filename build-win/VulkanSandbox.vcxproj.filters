@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\src\1_triangle\epic_triangle.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{F536E819-413C-3607-B80E-B75AEA7B926F}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\build-win\CMakeFiles\7fffb4b72d56140e00b8266e6a121886\shader.frag.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\build-win\CMakeFiles\7fffb4b72d56140e00b8266e6a121886\shader.vert.spv.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\build-win\CMakeFiles\26d687b5c54a113e1ba2fd7503643585\shaders.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\build-win\CMakeFiles\shaders" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{BA655E38-6E7D-3A70-BFA6-92281A663269}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

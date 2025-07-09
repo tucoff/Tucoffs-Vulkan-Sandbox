@@ -152,14 +152,18 @@ private:
     // Initializes the GLFW window.
     void initWindow()
     {
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11); // Adicione isso antes de glfwInit()
+        #if defined(_WIN32) || defined(_WIN64)
+            // No platform hint needed for Windows
+        #elif defined(__linux__)
+            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11); // Set X11 platform for Linux
+        #endif
         glfwInit(); // Initialize the GLFW library.
 
         // Tell GLFW not to create an OpenGL context, as we are using Vulkan.
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         // Disable window resizing initially, as it simplifies initial Vulkan setup.
         // The callback will handle resizing later.
-        // glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Removed to allow resizing
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Removed to allow resizing
 
         // Create the GLFW window with specified width, height, title, and no full-screen or sharing.
         window = glfwCreateWindow(WIDTH, HEIGHT, "Triangulo", nullptr, nullptr);
@@ -413,7 +417,7 @@ private:
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
         // Iterate through the available devices to find a suitable one.
-        for (const auto& device : devices) {
+        for (const auto &device : devices) {
             VkPhysicalDeviceFeatures currentDeviceFeatures;
             vkGetPhysicalDeviceFeatures(device, &currentDeviceFeatures); // Query here!
 

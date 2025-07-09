@@ -1,6 +1,14 @@
 // epic_triangle.cpp
 #include "epic_triangle.h"          // Include the header file for this module
-#define VK_USE_PLATFORM_XCB_KHR   // Define this to use the Win32 platform for Vulkan
+
+#if defined(_WIN32) || defined(_WIN64) // Check if the platform is Windows
+    #define VK_USE_PLATFORM_WIN32_KHR
+    #define PLATFORM_WINDOWS
+#elif defined(__linux__) // Check if the platform is Linux
+    #define VK_USE_PLATFORM_XCB_KHR
+    #define PLATFORM_LINUX
+#endif
+
 #define GLFW_INCLUDE_VULKAN         // Define this to include Vulkan-specific headers with GLFW
 #include <GLFW/glfw3.h>             // Include GL framework for window management and input handling
 #include <iostream>                 // For standard input/output operations (e.g., std::cerr)

@@ -1,3 +1,9 @@
+// Region: Includes
+// This section includes necessary headers and defines platform-specific macros for Vulkan and GLFW.
+// It also sets up the application window and prepares for Vulkan initialization.
+// The code is structured to be compatible with both Windows and Linux platforms, using conditional compilation.
+#pragma region Includes
+
 // epic_triangle.cpp
 #include "epic_triangle.h"          // Include the header file for this module
 
@@ -23,6 +29,14 @@
 #include <limits>                   //Necessary for std::numeric_limits
 #include <algorithm>                //Necessary for std::clamp
 
+#pragma endregion
+
+// Region: Constants and Global Variables
+// This section defines constants and global variables used throughout the application.
+#pragma region Constants and Global Variables
+
+// Define the application name
+const char* APP_NAME = "Triangulo"; // Application name, means "Triangle" in Portuguese (PT-BR)
 // Define the width of the application window
 const uint32_t WIDTH = 800;
 // Define the height of the application window
@@ -52,6 +66,14 @@ const bool enableValidationLayers = false;
 #else
 const bool enableValidationLayers = true;
 #endif
+
+#pragma endregion
+
+// Region: Proxy Functions
+// This section defines proxy functions for Vulkan debug utilities.
+// These functions are used to create and destroy debug messengers, which are essential for debugging Vulkan
+// applications. They are defined as proxies because they call the actual Vulkan functions dynamically at runtime.
+# pragma region Proxy Functions
 
 // Proxy function to create a debug utility messenger.
 // vkCreateDebugUtilsMessengerEXT is an extension function, so its address must be loaded at runtime.
@@ -86,6 +108,12 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+# pragma endregion
+
+// Region: Structs
+// This section defines structs used to hold Vulkan-related data, such as queue family indices and swap chain support details.
+# pragma region Structs
+
 // A struct to hold the indices of queue families found on a physical device.
 // std::optional is used because a queue family might not be found.
 struct QueueFamilyIndices
@@ -100,12 +128,15 @@ struct QueueFamilyIndices
     }
 };
 
+// A struct to hold the details of swap chain support for a physical device.
 struct SwapChainSupportDetails
 {
     VkSurfaceCapabilitiesKHR capabilities = {}; // Surface capabilities, such as image count and size limits.
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
+
+# pragma endregion
 
 // Main application class for rendering a triangle with Vulkan.
 class HelloTriangleApplication
@@ -122,6 +153,11 @@ public:
     }
 
 private:
+    // Private member variables for the application state.
+    // GLFW window pointer, Vulkan instance, debug messenger, surface, physical device, logical device, queues, swap chain, and other Vulkan objects.
+    // These variables are used to manage the Vulkan rendering pipeline and resources.
+    # pragma region Private Member Variables
+
     GLFWwindow* window = nullptr;                                   // Pointer to the GLFW window object.
     VkInstance instance = VK_NULL_HANDLE;                           // Pointer to the GLFW window object.
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;       // Vulkan debug messenger object.
@@ -146,9 +182,12 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;              // Semaphores to signal when rendering is finished for a frame.
     std::vector<VkFence> inFlightFences;                            // Fences to signal when a frame's rendering commands have finished executing.
     uint32_t currentFrame = 0;                                      // Index of the current frame being processed.
-
     bool framebufferResized = false;                                // Flag to indicate if the framebuffer has been resized.
 
+    #pragma endregion
+
+    // Initializes the GLFW window and sets up the necessary callbacks.
+    # pragma region InitWindow()
     // Initializes the GLFW window.
     void initWindow()
     {
@@ -166,7 +205,7 @@ private:
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // Removed to allow resizing
 
         // Create the GLFW window with specified width, height, title, and no full-screen or sharing.
-        window = glfwCreateWindow(WIDTH, HEIGHT, "Triangulo", nullptr, nullptr);
+        window = glfwCreateWindow(WIDTH, HEIGHT, APP_NAME, nullptr, nullptr);
 
         // Set the user pointer for the window to this HelloTriangleApplication instance,
         // allowing access to its members from static callbacks.
@@ -182,6 +221,10 @@ private:
         // Set the framebufferResized flag to true to trigger swap chain recreation.
         app->framebufferResized = true;
     }
+    # pragma endregion
+
+    // Initializes Vulkan components and sets up the rendering pipeline.
+    # pragma region InitVulkan()
 
     // Initializes Vulkan components.
     void initVulkan()
@@ -201,99 +244,6 @@ private:
         createSyncObjects();     // Create synchronization objects (semaphores and fences).
     }
 
-    // The main application loop where events are polled and frames are drawn.
-    void mainLoop()
-    {
-        // Loop as long as the window should not close (e.g., user clicks the close button).
-        while (!glfwWindowShouldClose(window))
-        {
-            glfwPollEvents(); // Process all pending GLFW events (e.g., keyboard input, mouse movement).
-            drawFrame();      // Draw a single frame.
-        }
-
-        // Wait for the device to finish all pending operations before exiting.
-        vkDeviceWaitIdle(device);
-    }
-
-    // Cleans up swap chain-related resources.
-    void cleanupSwapChain() {
-        // Destroy all framebuffers created for the swap chain.
-        for (auto framebuffer : swapChainFramebuffers) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
-
-        // Destroy all image views created for the swap chain images.
-        for (auto imageView : swapChainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
-
-        // Destroy the Vulkan swap chain.
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
-    }
-
-    // Cleans up all allocated Vulkan and GLFW resources.
-    void cleanup()
-    {
-        cleanupSwapChain(); // Call the function to clean up swap chain resources.
-
-        // Destroy the graphics pipeline, pipeline layout, and render pass.
-        vkDestroyPipeline(device, graphicsPipeline, nullptr); // Destroy the graphics pipeline.
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr); // Destroy the pipeline layout.
-        vkDestroyRenderPass(device, renderPass, nullptr); // Destroy the render pass.
-
-        // Destroy synchronization objects for each frame in flight.
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr); // Destroy render finished semaphore.
-            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr); // Destroy image available semaphore.
-            vkDestroyFence(device, inFlightFences[i], nullptr);               // Destroy in flight fence.
-        }
-
-        vkDestroyCommandPool(device, commandPool, nullptr); // Destroy the command pool.
-
-        // Destroy the Vulkan logical device.
-        vkDestroyDevice(device, nullptr);
-
-        // Destroy the debug messenger if validation layers were enabled.
-        if (enableValidationLayers)
-        {
-            DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
-        }
-
-        // Destroy the Vulkan surface associated with the GLFW window.
-        vkDestroySurfaceKHR(instance, surface, nullptr);
-
-        // Destroy the Vulkan instance.
-        vkDestroyInstance(instance, nullptr);
-
-        // Destroy the GLFW window.
-        glfwDestroyWindow(window);
-
-        // Terminate GLFW.
-        glfwTerminate();
-    }
-
-    // Recreates the swap chain and related resources after a window resize or swap chain becoming out-of-date.
-    void recreateSwapChain() {
-        int width = 0, height = 0;
-        // Get the current framebuffer size. If minimized, wait until it's not.
-        glfwGetFramebufferSize(window, &width, &height);
-        while (width == 0 || height == 0) {
-            glfwGetFramebufferSize(window, &width, &height);
-            glfwWaitEvents(); // Wait for events to process the window resize.
-        }
-
-        // Wait for the device to be idle before recreating resources that might be in use.
-        vkDeviceWaitIdle(device);
-
-        cleanupSwapChain(); // Clean up existing swap chain resources.
-
-        createSwapChain();    // Create a new swap chain.
-        createImageViews();   // Create new image views for the new swap chain images.
-        createFramebuffers(); // Create new framebuffers for the new image views.
-        // Command buffers don't need to be recreated because they don't depend on swap chain images directly,
-        // only on the render pass and framebuffers, which are recreated.
-    }
-
     // Creates the Vulkan instance.
     void createInstance()
     {
@@ -306,9 +256,9 @@ private:
         // Populate application information. This is optional but good practice.
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;     // Specifies the type of the structure.
-        appInfo.pApplicationName = "Triangulo";                 // Name of the application and means "Triangle" from PT-BR.
+        appInfo.pApplicationName = APP_NAME;                    // Name of the application
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);  // Application version (1.0.0).
-        appInfo.pEngineName = "LXXIV";                          // Name of the engine.
+        appInfo.pEngineName = "LXXIV";                          // Name of the engine, yeah its a me reference.
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);       // Engine version (1.0.0).
         appInfo.apiVersion = VK_API_VERSION_1_0;                // Vulkan API version used.
 
@@ -348,6 +298,64 @@ private:
         }
     }
 
+    // Checks if all required validation layers are supported by the Vulkan instance.
+    bool checkValidationLayerSupport()
+    {
+        uint32_t layerCount;
+        // Get the number of available instance layers.
+        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+        // Allocate a vector to hold the properties of all available layers.
+        std::vector<VkLayerProperties> availableLayers(layerCount);
+        // Get the properties of all available instance layers.
+        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+        // Iterate through each required validation layer.
+        for (const char* layerName : validationLayers)
+        {
+            bool layerFound = false;
+
+            // Check if the current required layer is present in the available layers.
+            for (const auto& layerProperties : availableLayers)
+            {
+                if (strcmp(layerName, layerProperties.layerName) == 0) // Compare layer names.
+                {
+                    layerFound = true; // Set flag if layer is found.
+                    break;             // No need to check further for this layer.
+                }
+            }
+
+            // If a required layer was not found, return false immediately.
+            if (!layerFound)
+            {
+                return false;
+            }
+        }
+
+        return true; // All required validation layers are supported.
+    }
+
+
+    // Retrieves the list of required Vulkan instance extensions.
+    std::vector<const char*> getRequiredExtensions()
+    {
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions;
+        // Get the extensions required by GLFW for window surface creation.
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        // Create a vector from the GLFW required extensions.
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+        // If validation layers are enabled, add the debug utility extension.
+        if (enableValidationLayers)
+        {
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+
+        return extensions; // Return the combined list of required extensions.
+    }
+
     // Populates the VkDebugUtilsMessengerCreateInfoEXT structure.
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
     {
@@ -369,6 +377,15 @@ private:
 
         // pUserData can be used to pass arbitrary data to the callback, but it's not used here.
         // createInfo.pUserData = nullptr;
+    }
+
+    // Static callback function for Vulkan debug messages.
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+    {
+        // Print the validation layer message to the error stream.
+        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
+        return VK_FALSE; // Return VK_FALSE to indicate that the Vulkan call should not be aborted.
     }
 
     // Sets up the debug messenger for Vulkan validation layers.
@@ -437,6 +454,55 @@ private:
         }
     }
 
+    // Checks if the given physical device is suitable for the application.
+    bool isDeviceSuitable(VkPhysicalDevice device)
+    {
+        QueueFamilyIndices indices = findQueueFamilies(device); // Find the queue families supported by the device.
+        bool extensionsSupported = checkDeviceExtensionSupport(device); // Check if the required device extensions are supported.
+
+        // Check if the swap chain is adequate for the device.
+        bool swapChainAdequate = false;
+        if (extensionsSupported)
+        {
+            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        }
+
+        // Query device features and store them if suitable
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures); // Query here!
+
+        // Ensure the device supports the features you *plan* to enable.
+        // For now, since you're requesting none, this check will always pass.
+        // If you enable features later, you'd add checks like:
+        // bool requiredFeaturesSupported = deviceFeatures.samplerAnisotropy;
+
+        return indices.isComplete() && extensionsSupported && swapChainAdequate; // && requiredFeaturesSupported;
+    }
+
+    // Checks if the required Vulkan validation layers are supported by the system.
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
+    {
+        // Get the number of available device extensions.
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+        // If no extensions are available, return false.
+        if (extensionCount == 0) return false;
+        // Allocate a vector to hold the properties of all available extensions.
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        // Get the properties of all available device extensions.
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+        // Create a set from the required device extensions for easy lookup.
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+        // Iterate through each available extension.
+        for (const auto& extension : availableExtensions)
+        {
+            requiredExtensions.erase(extension.extensionName); // Remove found extensions from the set.
+        }
+        // If the set is empty, all required extensions are supported.
+        return requiredExtensions.empty();
+    }
+
     // Creates the Vulkan logical device.
     void createLogicalDevice()
     {
@@ -491,54 +557,6 @@ private:
         // Retrieve the handles for the graphics and present queues
         vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
-    }
-
-    // Checks if the given physical device is suitable for the application.
-    bool isDeviceSuitable(VkPhysicalDevice device)
-    {
-        QueueFamilyIndices indices = findQueueFamilies(device); // Find the queue families supported by the device.
-        bool extensionsSupported = checkDeviceExtensionSupport(device); // Check if the required device extensions are supported.
-
-        // Check if the swap chain is adequate for the device.
-        bool swapChainAdequate = false;
-        if (extensionsSupported)
-        {
-            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-        }
-
-        // Query device features and store them if suitable
-        VkPhysicalDeviceFeatures deviceFeatures;
-        vkGetPhysicalDeviceFeatures(device, &deviceFeatures); // Query here!
-
-        // Ensure the device supports the features you *plan* to enable.
-        // For now, since you're requesting none, this check will always pass.
-        // If you enable features later, you'd add checks like:
-        // bool requiredFeaturesSupported = deviceFeatures.samplerAnisotropy;
-
-        return indices.isComplete() && extensionsSupported && swapChainAdequate; // && requiredFeaturesSupported;
-    }
-
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device)
-    {
-        // Get the number of available device extensions.
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-        // If no extensions are available, return false.
-        if (extensionCount == 0) return false;
-        // Allocate a vector to hold the properties of all available extensions.
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        // Get the properties of all available device extensions.
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-        // Create a set from the required device extensions for easy lookup.
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-        // Iterate through each available extension.
-        for (const auto& extension : availableExtensions)
-        {
-            requiredExtensions.erase(extension.extensionName); // Remove found extensions from the set.
-        }
-        // If the set is empty, all required extensions are supported.
-        return requiredExtensions.empty();
     }
 
     // Finds the queue families supported by a given physical device.
@@ -958,6 +976,31 @@ private:
         vkDestroyShaderModule(device, vertShaderModule, nullptr);
     }
 
+    // Reads a file and returns its contents as a vector of characters.
+    static std::vector<char> readFile(const std::string& filename) 
+    {
+        // Open the file in binary mode and move the read pointer to the end to get the file size.
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        // Check if the file was opened successfully.
+        if (!file.is_open()) {
+            throw std::runtime_error("failed to open file!");
+        }
+
+        // Get the size of the file and create a buffer to hold its contents.
+        size_t fileSize = (size_t) file.tellg();
+        std::vector<char> buffer(fileSize);
+
+        // Move the read pointer back to the beginning of the file and read its contents into the buffer.
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+
+        // Close the file after reading its contents.
+        file.close();
+
+        return buffer; // Return the buffer containing the file contents.
+    }
+
     // Creates a shader module from the provided SPIR-V code.
     VkShaderModule createShaderModule(const std::vector<char>& code) 
     {
@@ -1043,66 +1086,6 @@ private:
         }
     }
 
-    // Records commands into a specific command buffer for rendering.
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-        // Begin recording commands into the command buffer.
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        // No flags for this command buffer, as it's reset each frame.
-        // beginInfo.flags = 0; 
-        // beginInfo.pInheritanceInfo = nullptr; // Not used for primary command buffers.
-
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
-
-        // Begin the render pass.
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;                              // The render pass to use.
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];      // The framebuffer for the current swap chain image.
-        renderPassInfo.renderArea.offset = {0, 0};                           // Offset for the render area.
-        renderPassInfo.renderArea.extent = swapChainExtent;                  // Extent (size) for the render area.
-
-        // Clear value for the color attachment (black, opaque).
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;         // Number of clear values.
-        renderPassInfo.pClearValues = &clearColor;  // Pointer to the clear values.
-
-        // Begin the render pass with inline command execution.
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-            // Bind the graphics pipeline.
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-            // Set the dynamic viewport.
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = (float) swapChainExtent.width;
-            viewport.height = (float) swapChainExtent.height;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
-            // Set the dynamic scissor rectangle.
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = swapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
-            // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
-            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
-        // End the render pass.
-        vkCmdEndRenderPass(commandBuffer);
-
-        // End recording commands into the command buffer.
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
-    }
-
     // Creates synchronization objects (semaphores and fences) for frame management.
     void createSyncObjects() {
         // Resize vectors to hold synchronization objects for each frame in flight.
@@ -1127,6 +1110,24 @@ private:
                 throw std::runtime_error("failed to create synchronization objects for a frame!");
             }
         }
+    }
+
+    # pragma endregion
+
+    // Main function to run the application.
+    # pragma region MainLoop()
+    // The main application loop where events are polled and frames are drawn.
+    void mainLoop()
+    {
+        // Loop as long as the window should not close (e.g., user clicks the close button).
+        while (!glfwWindowShouldClose(window))
+        {
+            glfwPollEvents(); // Process all pending GLFW events (e.g., keyboard input, mouse movement).
+            drawFrame();      // Draw a single frame.
+        }
+
+        // Wait for the device to finish all pending operations before exiting.
+        vkDeviceWaitIdle(device);
     }
 
     // Draws a single frame of the application.
@@ -1207,96 +1208,153 @@ private:
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    // Retrieves the list of required Vulkan instance extensions.
-    std::vector<const char*> getRequiredExtensions()
+    // Records commands into a specific command buffer for rendering.
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+        // Begin recording commands into the command buffer.
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // No flags for this command buffer, as it's reset each frame.
+        // beginInfo.flags = 0; 
+        // beginInfo.pInheritanceInfo = nullptr; // Not used for primary command buffers.
+
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("failed to begin recording command buffer!");
+        }
+
+        // Begin the render pass.
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = renderPass;                              // The render pass to use.
+        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];      // The framebuffer for the current swap chain image.
+        renderPassInfo.renderArea.offset = {0, 0};                           // Offset for the render area.
+        renderPassInfo.renderArea.extent = swapChainExtent;                  // Extent (size) for the render area.
+
+        // Clear value for the color attachment (black, opaque).
+        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+        renderPassInfo.clearValueCount = 1;         // Number of clear values.
+        renderPassInfo.pClearValues = &clearColor;  // Pointer to the clear values.
+
+        // Begin the render pass with inline command execution.
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+            // Bind the graphics pipeline.
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+            // Set the dynamic viewport.
+            VkViewport viewport{};
+            viewport.x = 0.0f;
+            viewport.y = 0.0f;
+            viewport.width = (float) swapChainExtent.width;
+            viewport.height = (float) swapChainExtent.height;
+            viewport.minDepth = 0.0f;
+            viewport.maxDepth = 1.0f;
+            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+            // Set the dynamic scissor rectangle.
+            VkRect2D scissor{};
+            scissor.offset = {0, 0};
+            scissor.extent = swapChainExtent;
+            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+            // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
+            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+        // End the render pass.
+        vkCmdEndRenderPass(commandBuffer);
+
+        // End recording commands into the command buffer.
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("failed to record command buffer!");
+        }
+    }
+
+
+    // Recreates the swap chain and related resources after a window resize or swap chain becoming out-of-date.
+    void recreateSwapChain() {
+        int width = 0, height = 0;
+        // Get the current framebuffer size. If minimized, wait until it's not.
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents(); // Wait for events to process the window resize.
+        }
+
+        // Wait for the device to be idle before recreating resources that might be in use.
+        vkDeviceWaitIdle(device);
+
+        cleanupSwapChain(); // Clean up existing swap chain resources.
+
+        createSwapChain();    // Create a new swap chain.
+        createImageViews();   // Create new image views for the new swap chain images.
+        createFramebuffers(); // Create new framebuffers for the new image views.
+        // Command buffers don't need to be recreated because they don't depend on swap chain images directly,
+        // only on the render pass and framebuffers, which are recreated.
+    }
+
+    # pragma endregion
+
+    // Cleans up Vulkan and GLFW resources.
+    # pragma region Cleanup()
+
+    // Cleans up swap chain-related resources.
+    void cleanupSwapChain() {
+        // Destroy all framebuffers created for the swap chain.
+        for (auto framebuffer : swapChainFramebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+
+        // Destroy all image views created for the swap chain images.
+        for (auto imageView : swapChainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+
+        // Destroy the Vulkan swap chain.
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+    }
+
+    // Cleans up all allocated Vulkan and GLFW resources.
+    void cleanup()
     {
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        // Get the extensions required by GLFW for window surface creation.
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        cleanupSwapChain(); // Call the function to clean up swap chain resources.
 
-        // Create a vector from the GLFW required extensions.
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        // Destroy the graphics pipeline, pipeline layout, and render pass.
+        vkDestroyPipeline(device, graphicsPipeline, nullptr); // Destroy the graphics pipeline.
+        vkDestroyPipelineLayout(device, pipelineLayout, nullptr); // Destroy the pipeline layout.
+        vkDestroyRenderPass(device, renderPass, nullptr); // Destroy the render pass.
 
-        // If validation layers are enabled, add the debug utility extension.
+        // Destroy synchronization objects for each frame in flight.
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr); // Destroy render finished semaphore.
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr); // Destroy image available semaphore.
+            vkDestroyFence(device, inFlightFences[i], nullptr);               // Destroy in flight fence.
+        }
+
+        vkDestroyCommandPool(device, commandPool, nullptr); // Destroy the command pool.
+
+        // Destroy the Vulkan logical device.
+        vkDestroyDevice(device, nullptr);
+
+        // Destroy the debug messenger if validation layers were enabled.
         if (enableValidationLayers)
         {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
 
-        return extensions; // Return the combined list of required extensions.
+        // Destroy the Vulkan surface associated with the GLFW window.
+        vkDestroySurfaceKHR(instance, surface, nullptr);
+
+        // Destroy the Vulkan instance.
+        vkDestroyInstance(instance, nullptr);
+
+        // Destroy the GLFW window.
+        glfwDestroyWindow(window);
+
+        // Terminate GLFW.
+        glfwTerminate();
     }
 
-    // Checks if all required validation layers are supported by the Vulkan instance.
-    bool checkValidationLayerSupport()
-    {
-        uint32_t layerCount;
-        // Get the number of available instance layers.
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    # pragma endregion
 
-        // Allocate a vector to hold the properties of all available layers.
-        std::vector<VkLayerProperties> availableLayers(layerCount);
-        // Get the properties of all available instance layers.
-        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-        // Iterate through each required validation layer.
-        for (const char* layerName : validationLayers)
-        {
-            bool layerFound = false;
-
-            // Check if the current required layer is present in the available layers.
-            for (const auto& layerProperties : availableLayers)
-            {
-                if (strcmp(layerName, layerProperties.layerName) == 0) // Compare layer names.
-                {
-                    layerFound = true; // Set flag if layer is found.
-                    break;             // No need to check further for this layer.
-                }
-            }
-
-            // If a required layer was not found, return false immediately.
-            if (!layerFound)
-            {
-                return false;
-            }
-        }
-
-        return true; // All required validation layers are supported.
-    }
-
-    // Reads a file and returns its contents as a vector of characters.
-    static std::vector<char> readFile(const std::string& filename) 
-    {
-        // Open the file in binary mode and move the read pointer to the end to get the file size.
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-        // Check if the file was opened successfully.
-        if (!file.is_open()) {
-            throw std::runtime_error("failed to open file!");
-        }
-
-        // Get the size of the file and create a buffer to hold its contents.
-        size_t fileSize = (size_t) file.tellg();
-        std::vector<char> buffer(fileSize);
-
-        // Move the read pointer back to the beginning of the file and read its contents into the buffer.
-        file.seekg(0);
-        file.read(buffer.data(), fileSize);
-
-        // Close the file after reading its contents.
-        file.close();
-
-        return buffer; // Return the buffer containing the file contents.
-    }
-
-    // Static callback function for Vulkan debug messages.
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
-    {
-        // Print the validation layer message to the error stream.
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-        return VK_FALSE; // Return VK_FALSE to indicate that the Vulkan call should not be aborted.
-    }
 };
 
 // Create a EPIC EXTREME ULTRA MEGA standard FUDEROSO triangle in Vulkan

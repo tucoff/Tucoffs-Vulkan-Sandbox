@@ -1070,8 +1070,8 @@ private:
     // Creates command buffers for recording rendering commands.
     void createCommandBuffers()
     {
-        // Resize the command buffers vector to match MAX_FRAMES_IN_FLIGHT.
-        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        // Resize the command buffers vector to match swapChainImages.size().
+        commandBuffers.resize(swapChainImages.size());
 
         // Allocate command buffers from the command pool.
         VkCommandBufferAllocateInfo allocInfo{};
@@ -1089,8 +1089,8 @@ private:
     // Creates synchronization objects (semaphores and fences) for frame management.
     void createSyncObjects() {
         // Resize vectors to hold synchronization objects for each frame in flight.
-        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+        imageAvailableSemaphores.resize(swapChainImages.size());
+        renderFinishedSemaphores.resize(swapChainImages.size());
         inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
         // Semaphore creation info.
@@ -1103,7 +1103,7 @@ private:
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Create in a signaled state.
 
         // Create semaphores and fences for each frame.
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
             if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
@@ -1151,8 +1151,8 @@ private:
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
         // Reset and record the command buffer for the current frame and image index.
-        vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+        vkResetCommandBuffer(commandBuffers[imageIndex], /*VkCommandBufferResetFlagBits*/ 0);
+        recordCommandBuffer(commandBuffers[imageIndex], imageIndex);
 
         // Submit information to the graphics queue.
         VkSubmitInfo submitInfo{};
@@ -1167,10 +1167,10 @@ private:
 
         // Specify the command buffer to execute.
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+        submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
         // Specify semaphores to signal after execution.
-        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[imageIndex]};
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -1221,46 +1221,46 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        // Begin the render pass.
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;                              // The render pass to use.
-        renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];      // The framebuffer for the current swap chain image.
-        renderPassInfo.renderArea.offset = {0, 0};                           // Offset for the render area.
-        renderPassInfo.renderArea.extent = swapChainExtent;                  // Extent (size) for the render area.
+            // Begin the render pass.
+            VkRenderPassBeginInfo renderPassInfo{};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = renderPass;                              // The render pass to use.
+            renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];      // The framebuffer for the current swap chain image.
+            renderPassInfo.renderArea.offset = {0, 0};                           // Offset for the render area.
+            renderPassInfo.renderArea.extent = swapChainExtent;                  // Extent (size) for the render area.
 
-        // Clear value for the color attachment (black, opaque).
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;         // Number of clear values.
-        renderPassInfo.pClearValues = &clearColor;  // Pointer to the clear values.
+            // Clear value for the color attachment (black, opaque).
+            VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+            renderPassInfo.clearValueCount = 1;         // Number of clear values.
+            renderPassInfo.pClearValues = &clearColor;  // Pointer to the clear values.
 
-        // Begin the render pass with inline command execution.
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+            // Begin the render pass with inline command execution.
+            vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-            // Bind the graphics pipeline.
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+                // Bind the graphics pipeline.
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-            // Set the dynamic viewport.
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = (float) swapChainExtent.width;
-            viewport.height = (float) swapChainExtent.height;
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+                // Set the dynamic viewport.
+                VkViewport viewport{};
+                viewport.x = 0.0f;
+                viewport.y = 0.0f;
+                viewport.width = (float) swapChainExtent.width;
+                viewport.height = (float) swapChainExtent.height;
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+                vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-            // Set the dynamic scissor rectangle.
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = swapChainExtent;
-            vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+                // Set the dynamic scissor rectangle.
+                VkRect2D scissor{};
+                scissor.offset = {0, 0};
+                scissor.extent = swapChainExtent;
+                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
-            vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+                // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
+                vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-        // End the render pass.
-        vkCmdEndRenderPass(commandBuffer);
+            // End the render pass.
+            vkCmdEndRenderPass(commandBuffer);
 
         // End recording commands into the command buffer.
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {

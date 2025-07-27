@@ -1268,7 +1268,6 @@ private:
         }
     }
 
-
     // Recreates the swap chain and related resources after a window resize or swap chain becoming out-of-date.
     void recreateSwapChain() {
         int width = 0, height = 0;
@@ -1323,11 +1322,19 @@ private:
         vkDestroyRenderPass(device, renderPass, nullptr); // Destroy the render pass.
 
         // Destroy synchronization objects for each frame in flight.
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr); // Destroy render finished semaphore.
-            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr); // Destroy image available semaphore.
-            vkDestroyFence(device, inFlightFences[i], nullptr);               // Destroy in flight fence.
+        for (size_t i = 0; i < renderFinishedSemaphores.size(); i++) {
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
         }
+        for (size_t i = 0; i < imageAvailableSemaphores.size(); i++) {
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+        }
+        for (size_t i = 0; i < inFlightFences.size(); i++) {
+            vkDestroyFence(device, inFlightFences[i], nullptr);
+        }
+
+        renderFinishedSemaphores.clear(); // Clear the render finished semaphores vector.
+        imageAvailableSemaphores.clear(); // Clear the image available semaphores vector.
+        inFlightFences.clear(); // Clear the in-flight fences vector.
 
         vkDestroyCommandPool(device, commandPool, nullptr); // Destroy the command pool.
 

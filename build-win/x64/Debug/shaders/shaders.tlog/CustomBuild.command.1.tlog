@@ -1,0 +1,42 @@
+^C:\USERS\USUÁRIO\DOCUMENTS\GITHUB\TUCOFFS-VULKAN-SANDBOX\BUILD-WIN\CMAKEFILES\7FFFB4B72D56140E00B8266E6A121886\SHADER.FRAG.SPV.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E make_directory C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/bin/1_triangle
+if %errorlevel% neq 0 goto :cmEnd
+C:\VulkanSDK\1.4.309.0\Bin\glslc.exe C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/shaders/1_triangle/shader.frag -o C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/bin/1_triangle/shader.frag.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\USUÁRIO\DOCUMENTS\GITHUB\TUCOFFS-VULKAN-SANDBOX\BUILD-WIN\CMAKEFILES\7FFFB4B72D56140E00B8266E6A121886\SHADER.VERT.SPV.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E make_directory C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/bin/1_triangle
+if %errorlevel% neq 0 goto :cmEnd
+C:\VulkanSDK\1.4.309.0\Bin\glslc.exe C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/shaders/1_triangle/shader.vert -o C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/bin/1_triangle/shader.vert.spv
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\USUÁRIO\DOCUMENTS\GITHUB\TUCOFFS-VULKAN-SANDBOX\BUILD-WIN\CMAKEFILES\26D687B5C54A113E1BA2FD7503643585\SHADERS.RULE
+setlocal
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\USUÁRIO\DOCUMENTS\GITHUB\TUCOFFS-VULKAN-SANDBOX\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox -BC:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win --check-stamp-file C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

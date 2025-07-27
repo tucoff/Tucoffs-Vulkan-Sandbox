@@ -1,0 +1,6 @@
+﻿  Building Custom Rule C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/CMakeLists.txt
+  main.cpp
+  epic_triangle.cpp
+  Gerando Código...
+  VulkanSandbox.vcxproj -> C:\Users\Usuário\Documents\GitHub\Tucoffs-Vulkan-Sandbox\build-win\bin\Debug\VulkanSandbox.exe
+  	Copying compiled shader directory 1_triangle to executable directory

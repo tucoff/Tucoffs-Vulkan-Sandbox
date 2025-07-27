@@ -1,0 +1,4 @@
+C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/CMakeFiles/VulkanSandbox.dir
+C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/CMakeFiles/shaders.dir
+C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/CMakeFiles/ALL_BUILD.dir
+C:/Users/Usuário/Documents/GitHub/Tucoffs-Vulkan-Sandbox/build-win/CMakeFiles/ZERO_CHECK.dir

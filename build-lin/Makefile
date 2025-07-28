@@ -23,10 +23,11 @@ SHADER_DIRS := $(wildcard ../shaders/*)
 
 # Source files
 MAIN_SRC    := $(SRC_DIR)/main.cpp
+UTILS_SRC  := $(SRC_DIR)/utils.cpp
 PROJECT_SRCS := $(filter-out $(MAIN_SRC), $(wildcard $(SRC_DIR)/*/*.cpp))
 
 # Include all project folders + root src/
-INCLUDES := $(patsubst %, -I%, $(filter-out $(MAIN_SRC), $(wildcard $(SRC_DIR)/*))) -I$(SRC_DIR)
+INCLUDES := $(patsubst %,-I%,$(filter %/,$(wildcard $(SRC_DIR)/*/))) -I$(SRC_DIR)
 
 # Build flags
 CFLAGS   := -std=c++17 -O2 $(INCLUDES)
@@ -54,7 +55,7 @@ shaders: $(SPIRV)
 	$(GLSLC) $< -o $@
 
 # Compile main launcher and all project modules
-$(TARGET): $(MAIN_SRC) $(PROJECT_SRCS)
+$(TARGET): $(MAIN_SRC) $(UTILS_SRC) $(PROJECT_SRCS)
 	$(CXX) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Build and execute the launcher

@@ -6,6 +6,7 @@
 
 // epic_triangle.cpp
 #include "epic_triangle.h"          // Include the header file for this module
+#include "utils.h"                  // Include the header file for this module
 
 #if defined(_WIN32) || defined(_WIN64) // Check if the platform is Windows
     #define VK_USE_PLATFORM_WIN32_KHR
@@ -68,47 +69,6 @@ const bool enableValidationLayers = true;
 #endif
 
 #pragma endregion
-
-// Region: Proxy Functions
-// This section defines proxy functions for Vulkan debug utilities.
-// These functions are used to create and destroy debug messengers, which are essential for debugging Vulkan
-// applications. They are defined as proxies because they call the actual Vulkan functions dynamically at runtime.
-# pragma region Proxy Functions
-
-// Proxy function to create a debug utility messenger.
-// vkCreateDebugUtilsMessengerEXT is an extension function, so its address must be loaded at runtime.
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-    // Get the address of the vkCreateDebugUtilsMessengerEXT function from the Vulkan instance.
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-
-    // If the function pointer is valid, call the function.
-    if (func != nullptr)
-    {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-    // Otherwise, return an error indicating the extension is not present.
-    else
-    {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-}
-
-// Proxy function to destroy a debug utility messenger.
-// vkDestroyDebugUtilsMessengerEXT is an extension function, so its address must be loaded at runtime.
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
-{
-    // Get the address of the vkDestroyDebugUtilsMessengerEXT function from the Vulkan instance.
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-
-    // If the function pointer is valid, call the function.
-    if (func != nullptr)
-    {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
-
-# pragma endregion
 
 // Region: Structs
 // This section defines structs used to hold Vulkan-related data, such as queue family indices and swap chain support details.

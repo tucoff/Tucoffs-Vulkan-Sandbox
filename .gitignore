@@ -1,0 +1,42 @@
+# Diretórios de build (Linux, Windows, etc)
+build-*/
+bin/
+*.dir/
+
+# Arquivos de build do Visual Studio
+*.sln
+*.vcxproj*
+*.filters
+*.user
+.vs/
+
+# Arquivos do CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.cmake
+
+# Arquivos temporários e binários
+*.obj
+*.o
+*.pdb
+*.exe
+*.dll
+*.lib
+*.so
+*.a
+*.log
+*.save
+
+# Arquivos do CLion/JetBrains
+.idea/
+*.iml
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+
+# Shaders compilados
+*.spv

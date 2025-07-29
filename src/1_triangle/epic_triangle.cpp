@@ -5,30 +5,34 @@
 #pragma region Includes
 
 // epic_triangle.cpp
-#include "epic_triangle.h"          // Include the header file for this module
-#include "utils.h"                  // Include the header file for this module
+#include "epic_triangle.h"              // Include the header file for this module
+#include "utils.h"                      // Include the header file for this module
 
-#if defined(_WIN32) || defined(_WIN64) // Check if the platform is Windows
+#if defined(_WIN32) || defined(_WIN64)  // Check if the platform is Windows
     #define VK_USE_PLATFORM_WIN32_KHR
     #define PLATFORM_WINDOWS
-#elif defined(__linux__) // Check if the platform is Linux
+#elif defined(__linux__)                // Check if the platform is Linux
     #define VK_USE_PLATFORM_XCB_KHR
     #define PLATFORM_LINUX
 #endif
 
-#define GLFW_INCLUDE_VULKAN         // Define this to include Vulkan-specific headers with GLFW
-#include <GLFW/glfw3.h>             // Include GL framework for window management and input handling
-#include <iostream>                 // For standard input/output operations (e.g., std::cerr)
-#include <fstream>                  // For file stream operations (not used in this code, but often included for file I/O)
-#include <stdexcept>                // For standard exception handling (e.g., std::runtime_error)
-#include <vector>                   // For using std::vector dynamic arrays
-#include <cstring>                  // For C-style string manipulation (e.g., strcmp)
-#include <cstdlib>                  // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
-#include <optional>                 // For using std::optional to represent potentially absent values
-#include <set>                      // For using std::set to store unique values
-#include <cstdint>                  //Necessary for uint32_t
-#include <limits>                   //Necessary for std::numeric_limits
-#include <algorithm>                //Necessary for std::clamp
+#define GLFW_INCLUDE_VULKAN             // Define this to include Vulkan-specific headers with GLFW
+#include <GLFW/glfw3.h>                 // Include GL framework for window management and input handling
+#include <glm/glm.hpp>                  // Include GLM for vector and matrix operations
+#include <glm/gtc/matrix_transform.hpp> // Include GLM for matrix transformations
+#include <glm/gtc/type_ptr.hpp>         // Include GLM for converting glm types to raw data pointers
+#include <array>                        // For using std::array (fixed-size arrays)
+#include <iostream>                     // For standard input/output operations (e.g., std::cerr)
+#include <fstream>                      // For file stream operations (not used in this code, but often included for file I/O)
+#include <stdexcept>                    // For standard exception handling (e.g., std::runtime_error)
+#include <vector>                       // For using std::vector dynamic arrays
+#include <cstring>                      // For C-style string manipulation (e.g., strcmp)
+#include <cstdlib>                      // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
+#include <optional>                     // For using std::optional to represent potentially absent values
+#include <set>                          // For using std::set to store unique values
+#include <cstdint>                      //Necessary for uint32_t
+#include <limits>                       //Necessary for std::numeric_limits
+#include <algorithm>                    //Necessary for std::clamp
 
 #pragma endregion
 
@@ -39,9 +43,9 @@
 // Define the application name
 const char* APP_NAME = "Triangulo"; // Application name, means "Triangle" in Portuguese (PT-BR)
 // Define the width of the application window
-const uint32_t WIDTH = 800;
+const uint32_t WIDTH = 1280;
 // Define the height of the application window
-const uint32_t HEIGHT = 600;
+const uint32_t HEIGHT = 720;
 
 // Maximum number of frames that can be in flight (processed concurrently)
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -96,7 +100,59 @@ struct SwapChainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+
+
 # pragma endregion
+
+// Region: Vertex
+// This section defines the vertex structure used for rendering the "triangle".
+# pragma region Vertex
+//Vertex structure for the triangle
+struct Vertex
+{
+    glm::vec2 pos; // Position of the vertex in 2D space.
+    glm::vec3 color;    // Color of the vertex in RGB format.
+
+    // Function to specify the attribute descriptions for the vertex structure.
+    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+        // Position attribute
+        attributeDescriptions[0].binding = 0; // Binding index for the vertex data.
+        attributeDescriptions[0].location = 0; // Location in the shader.
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT; // Format of the position data (2D float).
+        attributeDescriptions[0].offset = offsetof(Vertex, pos); // Offset in the vertex structure.
+
+        // Color attribute
+        attributeDescriptions[1].binding = 0; // Binding index for the vertex data.
+        attributeDescriptions[1].location = 1; // Location in the shader.
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT; // Format of the color data (RGB float).
+        attributeDescriptions[1].offset = offsetof(Vertex, color); // Offset in the vertex structure.
+
+        return attributeDescriptions; // Return the array of attribute descriptions.
+    }
+
+    // Function to specify the binding description for the vertex structure.
+    static VkVertexInputBindingDescription getBindingDescription()
+    {
+        VkVertexInputBindingDescription bindingDescription{};
+        bindingDescription.binding = 0; // Binding index for the vertex data.
+        bindingDescription.stride = sizeof(Vertex); // Size of each vertex in bytes.
+        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX; // Data is per vertex.
+
+        return bindingDescription; // Return the binding description.
+    }
+};
+
+// Vertices for the triangle
+const std::vector<Vertex> vertices = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // Bottom left vertex (red)
+    {{0.5f, -0.5f},  {0.0f, 1.0f, 0.0f}},  // Bottom right vertex (green)
+    {{0.0f,  0.5f},  {0.0f, 0.0f, 1.0f}}   // Top vertex (blue)
+};
+
+#pragma endregion
 
 // Main application class for rendering a triangle with Vulkan.
 class HelloTriangleApplication
@@ -832,11 +888,16 @@ private:
         // Combine the vertex and fragment shader stage create info into an array.
         VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
+        auto bindingDescription = Vertex::getBindingDescription(); // Get the binding description for vertex input.
+        auto attributeDescriptions = Vertex::getAttributeDescriptions(); // Get the attribute descriptions for vertex input
+
         // Create the vertex input state create info structure.
         VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 0;
-        vertexInputInfo.vertexAttributeDescriptionCount = 0;
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
         // Create the input assembly state create info structure.
         VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -1329,6 +1390,7 @@ private:
 int triangle()
 {
     HelloTriangleApplication app; // Create an instance of the HelloTriangleApplication class.
+    // I call it triangle application, but turns out it's a training for the whole Vulkan Tutorial in a single file.
 
     try
     {

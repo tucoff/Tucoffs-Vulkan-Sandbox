@@ -147,9 +147,9 @@ struct Vertex
 
 // Vertices for the triangle
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // Bottom left vertex (red)
-    {{0.5f, -0.5f},  {0.0f, 1.0f, 0.0f}},  // Bottom right vertex (green)
-    {{0.0f,  0.5f},  {0.0f, 0.0f, 1.0f}}   // Top vertex (blue)
+    {{0.0f, -1.0f}, {1.0f, 0.0f, 0.0f}}, // Bottom left vertex (red)
+    {{0.05f, 1.0f},  {0.0f, 0.0f, 0.0f}},  // Bottom right vertex (green)
+    {{-0.05f,  1.0f},  {0.0f, 0.0f, 0.0f}}   // Top vertex (blue)
 };
 
 #pragma endregion
@@ -193,6 +193,8 @@ private:
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;                   // Vulkan graphics pipeline object for rendering.
     std::vector<VkFramebuffer> swapChainFramebuffers;               // Vector to hold framebuffers for the swap chain images.
     VkCommandPool commandPool = VK_NULL_HANDLE;                     // Vulkan command pool for managing command buffers.
+    VkBuffer vertexBuffer = VK_NULL_HANDLE;                         // Vulkan buffer for storing vertex data.
+    VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;             // Vulkan device memory for the vertex buffer.
     std::vector<VkCommandBuffer> commandBuffers;                    // Vector to hold command buffers for recording rendering commands.
     std::vector<VkSemaphore> imageAvailableSemaphores;              // Semaphores to signal when an image is available from the swap chain.
     std::vector<VkSemaphore> renderFinishedSemaphores;              // Semaphores to signal when rendering is finished for a frame.
@@ -256,6 +258,7 @@ private:
         createGraphicsPipeline();// Create the graphics pipeline
         createFramebuffers();    // Create the framebuffer
         createCommandPool();     // Create the command pool for command buffers.
+        createVertexBuffer();    // Create the vertex buffer for the triangle.
         createCommandBuffers();  // Create command buffers for rendering commands.
         createSyncObjects();     // Create synchronization objects (semaphores and fences).
     }
@@ -350,7 +353,6 @@ private:
 
         return true; // All required validation layers are supported.
     }
-
 
     // Retrieves the list of required Vulkan instance extensions.
     std::vector<const char*> getRequiredExtensions()
@@ -1088,6 +1090,60 @@ private:
         }
     }
 
+    // Creates a vertex buffer for the triangle. 
+    void createVertexBuffer()
+    {
+        VkBufferCreateInfo bufferInfo{}; // Create a buffer create info structure.
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO; // Specify the type of the structure.
+        bufferInfo.size = sizeof(vertices[0]) * vertices.size(); // Specify the size of the buffer in bytes.
+        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; // Specify the buffer usage.
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // Specify the sharing mode.
+    
+        if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create vertex buffer!"); // Throw an error if buffer creation fails.
+        }
+
+        VkMemoryRequirements memRequirements; // Create a memory requirements structure.
+        vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements); // Get the memory requirements for the buffer.
+        VkMemoryAllocateInfo allocInfo{}; // Create a memory allocate info structure.
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO; // Specify the type of the structure.
+        allocInfo.allocationSize = memRequirements.size; // Set the allocation size to the buffer's memory requirements size.
+        allocInfo.memoryTypeIndex = findMemoryTypeIndex(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT); // Find a suitable memory type index.
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to allocate vertex buffer memory!"); // Throw an error if memory allocation fails.
+        }
+
+        vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0); // Bind the allocated memory to the buffer.
+
+        // Copy the vertex data to the buffer.
+        void* data; // Create a pointer to hold the mapped memory address.
+        vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data); // Map the buffer memory to the pointer.
+            memcpy(data, vertices.data(), bufferInfo.size); // Copy the vertex data to the mapped memory.
+        vkUnmapMemory(device, vertexBufferMemory); // Unmap the memory after copying.
+    }
+
+    // Finds a suitable memory type based on the type filter and properties.
+    uint32_t findMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags properties) 
+    {
+        VkPhysicalDeviceMemoryProperties memProperties; // Create a memory properties structure.
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties); // Get the memory properties of the physical device.
+
+        // Iterate through the memory types to find a suitable one.
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) 
+        {
+            // Check if the memory type is suitable based on the type filter and properties.
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) 
+            {
+                return i; // Return the index of the suitable memory type.
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!"); // Throw an error if no suitable memory type is found.
+    }
+
     // Creates command buffers for recording rendering commands.
     void createCommandBuffers()
     {
@@ -1277,8 +1333,13 @@ private:
                 scissor.extent = swapChainExtent;
                 vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+                // Bind the vertex buffer.
+                VkBuffer vertexBuffers[] = {vertexBuffer}; // Array of vertex buffers to bind.
+                VkDeviceSize offsets[] = {0}; // Offsets for each vertex buffer.
+                vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
                 // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
-                vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+                vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
             // End the render pass.
             vkCmdEndRenderPass(commandBuffer);
@@ -1336,6 +1397,9 @@ private:
     void cleanup()
     {
         cleanupSwapChain(); // Call the function to clean up swap chain resources.
+
+        vkDestroyBuffer(device, vertexBuffer, nullptr); // Destroy the vertex buffer.
+        vkFreeMemory(device, vertexBufferMemory, nullptr); // Free the memory allocated for the vertex buffer.
 
         // Destroy the graphics pipeline, pipeline layout, and render pass.
         vkDestroyPipeline(device, graphicsPipeline, nullptr); // Destroy the graphics pipeline.

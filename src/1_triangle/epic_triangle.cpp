@@ -100,7 +100,12 @@ struct SwapChainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-
+struct UniformBufferObject
+{
+    glm::mat4 model; // Model matrix for transforming the triangle.
+    glm::mat4 view;  // View matrix for camera position and orientation.
+    glm::mat4 proj;  // Projection matrix for perspective or orthographic projection.
+};
 
 # pragma endregion
 
@@ -147,9 +152,15 @@ struct Vertex
 
 // Vertices for the triangle
 const std::vector<Vertex> vertices = {
-    {{0.0f, -1.0f}, {1.0f, 0.0f, 0.0f}}, // Bottom left vertex (red)
-    {{0.05f, 1.0f},  {0.0f, 0.0f, 0.0f}},  // Bottom right vertex (green)
-    {{-0.05f,  1.0f},  {0.0f, 0.0f, 0.0f}}   // Top vertex (blue)
+    {{0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, // Top left vertex (red)
+    {{0.5f, 0.5f},  {0.0f, 1.0f, 0.0f}},  // Bottom right vertex (green)
+    {{-0.5f,  0.5f},  {0.0f, 0.0f, 1.0f}},  // Top right vertex (blue)
+    {{-0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}} // Bottom left vertex (green)
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, // First triangle (top left to bottom right)
+    0, 2, 3  // Second triangle (top left to bottom left)
 };
 
 #pragma endregion
@@ -195,6 +206,8 @@ private:
     VkCommandPool commandPool = VK_NULL_HANDLE;                     // Vulkan command pool for managing command buffers.
     VkBuffer vertexBuffer = VK_NULL_HANDLE;                         // Vulkan buffer for storing vertex data.
     VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;             // Vulkan device memory for the vertex buffer.
+    VkBuffer indexBuffer = VK_NULL_HANDLE;                          // Vulkan buffer for storing index data.
+    VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;              // Vulkan device memory for the index buffer.
     std::vector<VkCommandBuffer> commandBuffers;                    // Vector to hold command buffers for recording rendering commands.
     std::vector<VkSemaphore> imageAvailableSemaphores;              // Semaphores to signal when an image is available from the swap chain.
     std::vector<VkSemaphore> renderFinishedSemaphores;              // Semaphores to signal when rendering is finished for a frame.
@@ -259,6 +272,7 @@ private:
         createFramebuffers();    // Create the framebuffer
         createCommandPool();     // Create the command pool for command buffers.
         createVertexBuffer();    // Create the vertex buffer for the triangle.
+        createIndexBuffer();     // Create the index buffer for indexed drawing.
         createCommandBuffers();  // Create command buffers for rendering commands.
         createSyncObjects();     // Create synchronization objects (semaphores and fences).
     }
@@ -1093,10 +1107,56 @@ private:
     // Creates a vertex buffer for the triangle. 
     void createVertexBuffer()
     {
+        VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size(); // Calculate the size of the vertex buffer.
+
+        // Create a staging buffer to transfer vertex data to the GPU.
+        VkBuffer stagingBuffer; // Create a buffer to hold the vertex data temporarily.
+        VkDeviceMemory stagingBufferMemory; // Create a memory object to hold the buffer data.
+
+        // Create the staging buffer with the specified size, usage, and memory properties.
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory); // Create the staging buffer.
+
+        // Copy the vertex data to the buffer.
+        void* data; // Create a pointer to hold the mapped memory address.
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data); // Map the buffer memory to the pointer.
+        memcpy(data, vertices.data(), bufferSize); // Copy the vertex data to the mapped memory.
+        vkUnmapMemory(device, stagingBufferMemory); // Unmap the memory after copying.
+
+        // Create the vertex buffer to hold the vertex data on the GPU.
+        createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory); // Create the vertex buffer.
+    
+        // Copy the data from the staging buffer to the vertex buffer.
+        copyBuffer(stagingBuffer, vertexBuffer, bufferSize); // Copy the vertex data from the staging buffer to the vertex buffer.
+        vkDestroyBuffer(device, stagingBuffer, nullptr); // Destroy the staging buffer as it is no longer needed.
+        vkFreeMemory(device, stagingBufferMemory, nullptr); // Free the memory allocated for the staging buffer.
+    }
+
+    // Finds a suitable memory type based on the type filter and properties.
+    uint32_t findMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags properties) 
+    {
+        VkPhysicalDeviceMemoryProperties memProperties; // Create a memory properties structure.
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties); // Get the memory properties of the physical device.
+
+        // Iterate through the memory types to find a suitable one.
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) 
+        {
+            // Check if the memory type is suitable based on the type filter and properties.
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) 
+            {
+                return i; // Return the index of the suitable memory type.
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!"); // Throw an error if no suitable memory type is found.
+    }
+
+    // Creates a buffer with the specified size, usage, and memory properties.
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
+    {
         VkBufferCreateInfo bufferInfo{}; // Create a buffer create info structure.
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO; // Specify the type of the structure.
-        bufferInfo.size = sizeof(vertices[0]) * vertices.size(); // Specify the size of the buffer in bytes.
-        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; // Specify the buffer usage.
+        bufferInfo.size = size; // Specify the size of the buffer in bytes.
+        bufferInfo.usage = usage; // Specify the buffer usage.
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // Specify the sharing mode.
     
         if (vkCreateBuffer(device, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS) 
@@ -1117,31 +1177,71 @@ private:
         }
 
         vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0); // Bind the allocated memory to the buffer.
-
-        // Copy the vertex data to the buffer.
-        void* data; // Create a pointer to hold the mapped memory address.
-        vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data); // Map the buffer memory to the pointer.
-            memcpy(data, vertices.data(), bufferInfo.size); // Copy the vertex data to the mapped memory.
-        vkUnmapMemory(device, vertexBufferMemory); // Unmap the memory after copying.
     }
 
-    // Finds a suitable memory type based on the type filter and properties.
-    uint32_t findMemoryTypeIndex(uint32_t typeFilter, VkMemoryPropertyFlags properties) 
+    // Begins recording a single-use command buffer.
+    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     {
-        VkPhysicalDeviceMemoryProperties memProperties; // Create a memory properties structure.
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties); // Get the memory properties of the physical device.
+        VkCommandBufferAllocateInfo allocInfo{}; // Create a command buffer allocate info structure.
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO; // Specify the type of the structure.
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY; // Specify the command buffer level (primary in this case).
+        allocInfo.commandPool = commandPool; // Specify the command pool to allocate from.
+        allocInfo.commandBufferCount = 1; // Allocate a single command buffer.
 
-        // Iterate through the memory types to find a suitable one.
-        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) 
-        {
-            // Check if the memory type is suitable based on the type filter and properties.
-            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) 
-            {
-                return i; // Return the index of the suitable memory type.
-            }
-        }
+        VkCommandBuffer commandBuffer; // Create a command buffer variable.
+        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer); // Allocate the command buffer.
 
-        throw std::runtime_error("failed to find suitable memory type!"); // Throw an error if no suitable memory type is found.
+        VkCommandBufferBeginInfo beginInfo{}; // Create a command buffer begin info structure.
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO; // Specify the type of the structure.
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; // Specify that the command buffer will be submitted only once.
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo); // Begin recording commands into the command buffer.
+
+        VkBufferCopy copyRegion{}; // Create a buffer copy region structure.
+        copyRegion.srcOffset = 0; // Set the source offset to 0 (start of the source buffer).
+        copyRegion.dstOffset = 0; // Set the destination offset to 0 (start of the destination buffer).
+        copyRegion.size = size; // Set the size of data to copy.
+
+        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion); // Record the buffer copy command into the command buffer.
+
+        vkEndCommandBuffer(commandBuffer); // End recording commands into the command buffer.
+
+        VkSubmitInfo submitInfo{}; // Create a submit info structure.
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO; // Specify the type of the structure.
+        submitInfo.commandBufferCount = 1; // Specify that we are submitting a single command buffer.
+        submitInfo.pCommandBuffers = &commandBuffer; // Set the pointer to the command buffer to submit.
+
+        vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE); // Submit the command buffer to the graphics queue.
+        vkQueueWaitIdle(graphicsQueue); // Wait for the graphics queue to become idle (all submitted commands have finished executing).
+
+        vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer); // Free the command buffer after use.
+    }
+
+    // Creates command buffers for recording rendering commands.
+    void createIndexBuffer()
+    {
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size(); // Calculate the size of the index buffer.
+
+        // Create a staging buffer to transfer index data to the GPU.
+        VkBuffer stagingBuffer; // Create a buffer to hold the index data temporarily.
+        VkDeviceMemory stagingBufferMemory; // Create a memory object to hold the buffer data.
+
+        // Create the staging buffer with the specified size, usage, and memory properties.
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory); // Create the staging buffer.
+
+        // Copy the index data to the buffer.
+        void* data; // Create a pointer to hold the mapped memory address.
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data); // Map the buffer memory to the pointer.
+        memcpy(data, indices.data(), bufferSize); // Copy the index data to the mapped memory.
+        vkUnmapMemory(device, stagingBufferMemory); // Unmap the memory after copying.
+
+        // Create the index buffer to hold the index data on the GPU.
+        createBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory); // Create the index buffer.
+    
+        // Copy the data from the staging buffer to the index buffer.
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize); // Copy the index data from the staging buffer to the index buffer.
+        vkDestroyBuffer(device, stagingBuffer, nullptr); // Destroy the staging buffer as it is no longer needed.
+        vkFreeMemory(device, stagingBufferMemory, nullptr); // Free the memory allocated for the staging buffer.
     }
 
     // Creates command buffers for recording rendering commands.
@@ -1337,9 +1437,13 @@ private:
                 VkBuffer vertexBuffers[] = {vertexBuffer}; // Array of vertex buffers to bind.
                 VkDeviceSize offsets[] = {0}; // Offsets for each vertex buffer.
                 vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+                
+                // Bind the index buffer.
+                vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16); // Bind the index buffer with 16-bit indices.
 
-                // Draw command: 3 vertices, 1 instance, 0 first vertex, 0 first instance.
-                vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+                // Draw the indexed triangle.
+                // In this case, we draw a single instance of the triangle using the indices defined in the index buffer.
+                vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 
             // End the render pass.
             vkCmdEndRenderPass(commandBuffer);
@@ -1397,6 +1501,10 @@ private:
     void cleanup()
     {
         cleanupSwapChain(); // Call the function to clean up swap chain resources.
+
+        // Destroy the index buffer and its memory.
+        vkDestroyBuffer(device, indexBuffer, nullptr); // Destroy the index buffer.
+        vkFreeMemory(device, indexBufferMemory, nullptr); // Free the memory allocated for the index buffer.
 
         vkDestroyBuffer(device, vertexBuffer, nullptr); // Destroy the vertex buffer.
         vkFreeMemory(device, vertexBufferMemory, nullptr); // Free the memory allocated for the vertex buffer.

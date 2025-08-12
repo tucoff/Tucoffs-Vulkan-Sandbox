@@ -16,23 +16,26 @@
     #define PLATFORM_LINUX
 #endif
 
-#define GLFW_INCLUDE_VULKAN             // Define this to include Vulkan-specific headers with GLFW
-#include <GLFW/glfw3.h>                 // Include GL framework for window management and input handling
-#include <glm/glm.hpp>                  // Include GLM for vector and matrix operations
-#include <glm/gtc/matrix_transform.hpp> // Include GLM for matrix transformations
-#include <glm/gtc/type_ptr.hpp>         // Include GLM for converting glm types to raw data pointers
-#include <array>                        // For using std::array (fixed-size arrays)
-#include <iostream>                     // For standard input/output operations (e.g., std::cerr)
-#include <fstream>                      // For file stream operations (not used in this code, but often included for file I/O)
-#include <stdexcept>                    // For standard exception handling (e.g., std::runtime_error)
-#include <vector>                       // For using std::vector dynamic arrays
-#include <cstring>                      // For C-style string manipulation (e.g., strcmp)
-#include <cstdlib>                      // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
-#include <optional>                     // For using std::optional to represent potentially absent values
-#include <set>                          // For using std::set to store unique values
-#include <cstdint>                      //Necessary for uint32_t
-#include <limits>                       //Necessary for std::numeric_limits
-#include <algorithm>                    //Necessary for std::clamp
+#define GLFW_INCLUDE_VULKAN                 // Define this to include Vulkan-specific headers with GLFW
+#include <GLFW/glfw3.h>                     // Include GL framework for window management and input handling
+#define GLM_FORCE_RADIANS                   // Force GLM to use radians for angles, which is the default in Vulkan
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES  // Force GLM to use aligned types for better performance with SIMD
+#include <glm/glm.hpp>                      // Include GLM for vector and matrix operations
+#include <glm/gtc/matrix_transform.hpp>     // Include GLM for matrix transformations
+#include <glm/gtc/type_ptr.hpp>             // Include GLM for converting glm types to raw data pointers
+#include <chrono>                           // For using std::chrono for timing operations
+#include <array>                            // For using std::array (fixed-size arrays)
+#include <iostream>                         // For standard input/output operations (e.g., std::cerr)
+#include <fstream>                          // For file stream operations (not used in this code, but often included for file I/O)
+#include <stdexcept>                        // For standard exception handling (e.g., std::runtime_error)
+#include <vector>                           // For using std::vector dynamic arrays
+#include <cstring>                          // For C-style string manipulation (e.g., strcmp)
+#include <cstdlib>                          // For general utilities (e.g., EXIT_SUCCESS, EXIT_FAILURE)
+#include <optional>                         // For using std::optional to represent potentially absent values
+#include <set>                              // For using std::set to store unique values
+#include <cstdint>                          // Necessary for uint32_t
+#include <limits>                           // Necessary for std::numeric_limits
+#include <algorithm>                        // Necessary for std::clamp
 
 #pragma endregion
 
@@ -48,7 +51,7 @@ const uint32_t WIDTH = 1280;
 const uint32_t HEIGHT = 720;
 
 // Maximum number of frames that can be in flight (processed concurrently)
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAX_FRAMES_IN_FLIGHT = 4;
 
 // A vector of C-style strings containing the names of Vulkan validation layers to enable.
 // These layers provide debugging and error checking for Vulkan API usage.
@@ -100,11 +103,12 @@ struct SwapChainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+// A struct to represent the uniform buffer object (UBO) used in shaders.
 struct UniformBufferObject
 {
-    glm::mat4 model; // Model matrix for transforming the triangle.
-    glm::mat4 view;  // View matrix for camera position and orientation.
-    glm::mat4 proj;  // Projection matrix for perspective or orthographic projection.
+    alignas(16) glm::mat4 model; // Model matrix for transforming the triangle.
+    alignas(16) glm::mat4 view;  // View matrix for camera position and orientation.
+    alignas(16) glm::mat4 proj;  // Projection matrix for perspective or orthographic projection.
 };
 
 # pragma endregion
@@ -200,6 +204,7 @@ private:
     VkExtent2D swapChainExtent = {};                                // Extent (size) of the swap chain images.
     std::vector<VkImageView> swapChainImageViews = {};              // Vector to hold image views for the swap chain images.
     VkRenderPass renderPass = VK_NULL_HANDLE;                       // Vulkan render pass object for rendering operations.
+    VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;     // Vulkan descriptor set layout for uniform buffers.
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;               // Vulkan pipeline layout for the graphics pipeline.
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;                   // Vulkan graphics pipeline object for rendering.
     std::vector<VkFramebuffer> swapChainFramebuffers;               // Vector to hold framebuffers for the swap chain images.
@@ -208,6 +213,11 @@ private:
     VkDeviceMemory vertexBufferMemory = VK_NULL_HANDLE;             // Vulkan device memory for the vertex buffer.
     VkBuffer indexBuffer = VK_NULL_HANDLE;                          // Vulkan buffer for storing index data.
     VkDeviceMemory indexBufferMemory = VK_NULL_HANDLE;              // Vulkan device memory for the index buffer.
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;               // Vulkan descriptor pool for allocating descriptor sets.
+    std::vector<VkBuffer> uniformBuffers;                           // Vector to hold uniform buffers for each swap chain image.
+    std::vector<VkDeviceMemory> uniformBuffersMemory;               // Vector to hold device memory for each uniform buffer.
+    std::vector<void*> uniformBuffersMapped;                        // Vector to hold mapped pointers for each uniform buffer.
+    std::vector<VkDescriptorSet> descriptorSets;                    // Vector to hold descriptor sets for each swap chain image.
     std::vector<VkCommandBuffer> commandBuffers;                    // Vector to hold command buffers for recording rendering commands.
     std::vector<VkSemaphore> imageAvailableSemaphores;              // Semaphores to signal when an image is available from the swap chain.
     std::vector<VkSemaphore> renderFinishedSemaphores;              // Semaphores to signal when rendering is finished for a frame.
@@ -260,21 +270,25 @@ private:
     // Initializes Vulkan components.
     void initVulkan()
     {
-        createInstance();        // Create the Vulkan instance.
-        setupDebugMessenger();   // Set up the debug messenger for validation layers.
-        createSurface();         // Create a Vulkan surface for rendering.
-        pickPhysicalDevice();    // Select a suitable physical device (GPU).
-        createLogicalDevice();   // Create the logical device.
-        createSwapChain();       // Create the swap chain for presenting images to the surface.
-        createImageViews();      // Create image views for the swap chain images.
-        createRenderPass();      // Create the render pass.
-        createGraphicsPipeline();// Create the graphics pipeline
-        createFramebuffers();    // Create the framebuffer
-        createCommandPool();     // Create the command pool for command buffers.
-        createVertexBuffer();    // Create the vertex buffer for the triangle.
-        createIndexBuffer();     // Create the index buffer for indexed drawing.
-        createCommandBuffers();  // Create command buffers for rendering commands.
-        createSyncObjects();     // Create synchronization objects (semaphores and fences).
+        createInstance();            // Create the Vulkan instance.
+        setupDebugMessenger();       // Set up the debug messenger for validation layers.
+        createSurface();             // Create a Vulkan surface for rendering.
+        pickPhysicalDevice();        // Select a suitable physical device (GPU).
+        createLogicalDevice();       // Create the logical device.
+        createSwapChain();           // Create the swap chain for presenting images to the surface.
+        createImageViews();          // Create image views for the swap chain images.
+        createRenderPass();          // Create the render pass.
+        createDescriptorSetLayout(); // Create the descriptor set layout.
+        createGraphicsPipeline();    // Create the graphics pipeline
+        createFramebuffers();        // Create the framebuffer
+        createCommandPool();         // Create the command pool for command buffers.
+        createVertexBuffer();       // Create the vertex buffer for the triangle.
+        createIndexBuffer();        // Create the index buffer for indexed drawing.
+        createUniformBuffers();     // Create uniform buffers for passing data to shaders.
+        createDescriptorPool();     // Create the descriptor pool.
+        createDescriptorSets();     // Create descriptor sets for binding uniform buffers.
+        createCommandBuffers();     // Create command buffers for rendering commands.
+        createSyncObjects();        // Create synchronization objects (semaphores and fences).
     }
 
     // Creates the Vulkan instance.
@@ -876,6 +890,27 @@ private:
         }
     }
 
+    // Creates the descriptor set layout for the application.
+    void createDescriptorSetLayout()
+    {
+        VkDescriptorSetLayoutBinding uboLayoutBinding{}; // Create a binding for the uniform buffer object (UBO).
+        uboLayoutBinding.binding = 0; // Binding index for the UBO.
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // Type of descriptor (UBO).
+        uboLayoutBinding.descriptorCount = 1; // Number of descriptors in this binding.
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT; // Shader stages that will use this binding (vertex shader).
+        uboLayoutBinding.pImmutableSamplers = nullptr; // No immutable samplers used.
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{}; // Create a structure to hold the descriptor set layout creation information.
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO; // Specifies the type of the structure.
+        layoutInfo.bindingCount = 1; // Number of bindings in the layout.
+        layoutInfo.pBindings = &uboLayoutBinding; // Pointer to the array of bindings.
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create descriptor set layout!"); // Throw an error if descriptor set layout creation fails.
+        }
+    }
+
     // Creates the graphics pipeline for rendering.
     void createGraphicsPipeline()
     {
@@ -935,7 +970,7 @@ private:
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rasterizer.depthBiasEnable = VK_FALSE;
 
         // Create the multisampling state create info structure.
@@ -977,7 +1012,8 @@ private:
         // Create the pipeline layout create info structure.
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // Set the descriptor set layout for the pipeline.
         pipelineLayoutInfo.pushConstantRangeCount = 0;
 
         // Create the pipeline layout.
@@ -1244,6 +1280,82 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr); // Free the memory allocated for the staging buffer.
     }
 
+    // Creates uniform buffers for each swap chain image.
+    void createUniformBuffers()
+    {
+        VkDeviceSize bufferSize = sizeof(UniformBufferObject); // Calculate the size of the uniform buffer.
+
+        // Resize the uniformBuffers and uniformBuffersMemory vectors to match the number of swap chain images.
+        uniformBuffers.resize(swapChainImages.size());
+        uniformBuffersMemory.resize(swapChainImages.size());
+        uniformBuffersMapped.resize(swapChainImages.size());
+
+        // Create a uniform buffer for each swap chain image.
+        for (size_t i = 0; i < swapChainImages.size(); i++) 
+        {
+            createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers[i], uniformBuffersMemory[i]); // Create the uniform buffer.
+
+            vkMapMemory(device, uniformBuffersMemory[i], 0, bufferSize, 0, &uniformBuffersMapped[i]); // Map the buffer memory to the pointer.
+        }
+    }
+
+    // Creates a descriptor pool for allocating descriptor sets.
+    void createDescriptorPool()
+    {
+        VkDescriptorPoolSize poolSize{}; // Create a descriptor pool size structure.
+        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // Specify the type of descriptor (uniform buffer).
+        poolSize.descriptorCount = static_cast<uint32_t>(swapChainImages.size()); // Set the number of descriptors in the pool.
+
+        VkDescriptorPoolCreateInfo poolInfo{}; // Create a descriptor pool create info structure.
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO; // Specify the type of the structure.
+        poolInfo.poolSizeCount = 1; // Number of different descriptor types in the pool.
+        poolInfo.pPoolSizes = &poolSize; // Pointer to the array of pool sizes.
+        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size()); // Maximum number of descriptor sets that can be allocated from the pool.
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create descriptor pool!"); // Throw an error if descriptor pool creation fails.
+        }
+    }
+
+    // Creates descriptor sets for each swap chain image.
+    void createDescriptorSets()
+    {
+        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout); // Create a vector of descriptor set layouts.
+        VkDescriptorSetAllocateInfo allocInfo{}; // Create a descriptor set allocate info structure.
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO; // Specify the type of the structure.
+        allocInfo.descriptorPool = descriptorPool; // Specify the descriptor pool to allocate from.
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size()); // Number of descriptor sets to allocate.
+        allocInfo.pSetLayouts = layouts.data(); // Pointer to the array of descriptor set layouts. 
+        descriptorSets.resize(swapChainImages.size()); // Resize the descriptorSets vector to match the number of swap chain images.
+    
+        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to allocate descriptor sets!"); // Throw an error if descriptor set allocation fails.
+        }   
+
+        // Update each descriptor set with the corresponding uniform buffer information.
+        for (size_t i = 0; i < swapChainImages.size(); i++) 
+        {
+            VkDescriptorBufferInfo bufferInfo{}; // Create a descriptor buffer info structure.
+            bufferInfo.buffer = uniformBuffers[i]; // Specify the uniform buffer for this descriptor set.
+            bufferInfo.offset = 0; // Set the offset within the buffer.
+            bufferInfo.range = sizeof(UniformBufferObject); // Set the size of the buffer.  
+
+            VkWriteDescriptorSet descriptorWrite{}; // Create a write descriptor set structure.
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; // Specify the type of the
+            descriptorWrite.dstSet = descriptorSets[i]; // Specify the destination descriptor set to update.
+            descriptorWrite.dstBinding = 0; // Specify the binding within the descriptor set to update
+            descriptorWrite.dstArrayElement = 0; // Specify the first array element to update.
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // Specify the type of descriptor.
+            descriptorWrite.descriptorCount = 1; // Number of descriptors to update.
+            descriptorWrite.pBufferInfo = &bufferInfo; // Pointer to the buffer info structure.
+            descriptorWrite.pImageInfo = nullptr; // No image info used.
+            descriptorWrite.pTexelBufferView = nullptr; // No texel buffer view used.
+            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr); // Update the descriptor set with the new information.
+        }
+    }
+
     // Creates command buffers for recording rendering commands.
     void createCommandBuffers()
     {
@@ -1264,7 +1376,8 @@ private:
     }
 
     // Creates synchronization objects (semaphores and fences) for frame management.
-    void createSyncObjects() {
+    void createSyncObjects() 
+    {
         // Resize vectors to hold synchronization objects for each frame in flight.
         imageAvailableSemaphores.resize(swapChainImages.size());
         renderFinishedSemaphores.resize(swapChainImages.size());
@@ -1308,7 +1421,8 @@ private:
     }
 
     // Draws a single frame of the application.
-    void drawFrame() {
+    void drawFrame() 
+    {
         // Wait for the fence of the current frame to be signaled (previous frame finished).
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -1330,6 +1444,9 @@ private:
         // Reset and record the command buffer for the current frame and image index.
         vkResetCommandBuffer(commandBuffers[imageIndex], /*VkCommandBufferResetFlagBits*/ 0);
         recordCommandBuffer(commandBuffers[imageIndex], imageIndex);
+
+        // Update the uniform buffer for the current frame.
+        updateUniformBuffer(currentFrame);
 
         // Submit information to the graphics queue.
         VkSubmitInfo submitInfo{};
@@ -1386,7 +1503,8 @@ private:
     }
 
     // Records commands into a specific command buffer for rendering.
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) 
+    {
         // Begin recording commands into the command buffer.
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1441,6 +1559,9 @@ private:
                 // Bind the index buffer.
                 vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16); // Bind the index buffer with 16-bit indices.
 
+                // Bind the descriptor set for the current image.
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[imageIndex], 0, nullptr);
+
                 // Draw the indexed triangle.
                 // In this case, we draw a single instance of the triangle using the indices defined in the index buffer.
                 vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
@@ -1455,7 +1576,8 @@ private:
     }
 
     // Recreates the swap chain and related resources after a window resize or swap chain becoming out-of-date.
-    void recreateSwapChain() {
+    void recreateSwapChain() 
+    {
         int width = 0, height = 0;
         // Get the current framebuffer size. If minimized, wait until it's not.
         glfwGetFramebufferSize(window, &width, &height);
@@ -1474,6 +1596,25 @@ private:
         createFramebuffers(); // Create new framebuffers for the new image views.
         // Command buffers don't need to be recreated because they don't depend on swap chain images directly,
         // only on the render pass and framebuffers, which are recreated.
+    }
+
+    // Updates the uniform buffer with the current transformation matrix.
+    void updateUniformBuffer(uint32_t currentImage) 
+    {
+        static auto startTime = std::chrono::high_resolution_clock::now(); // Start measuring time.
+
+        auto currentTime = std::chrono::high_resolution_clock::now(); // Get the current time.
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count(); // Calculate elapsed time in seconds.
+
+        // Create a transformation matrix that rotates the triangle over time.
+        UniformBufferObject ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)); // Rotate around the Z-axis.
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)); // Set the view matrix.
+        ubo.proj = glm::perspective(glm::radians(45.0f), (float) swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f); // Set the projection matrix.
+        ubo.proj[1][1] *= -1; // Invert the Y-axis for Vulkan's coordinate system.
+
+        // Copy the updated uniform buffer data to the mapped memory.
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo)); // Copy the uniform buffer object data to the mapped memory.
     }
 
     # pragma endregion
@@ -1501,6 +1642,17 @@ private:
     void cleanup()
     {
         cleanupSwapChain(); // Call the function to clean up swap chain resources.
+
+        // Destroy uniform buffers and free their memory.
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+            vkDestroyBuffer(device, uniformBuffers[i], nullptr); // Destroy the uniform buffer.
+            vkFreeMemory(device, uniformBuffersMemory[i], nullptr); // Free the memory allocated for the uniform buffer.
+        }
+
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr); // Destroy the descriptor pool.
+
+        // Destroy the descriptor set layout.
+        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr); // Destroy the descriptor set layout.
 
         // Destroy the index buffer and its memory.
         vkDestroyBuffer(device, indexBuffer, nullptr); // Destroy the index buffer.
